@@ -1,0 +1,2 @@
+hospital_name,district,city,known_phone,known_email,known_website,source_type,source_url,notes
+Example Hospital,Tumakuru,Tumakuru,,,,MANUAL,,Replace this example row before importing real data
