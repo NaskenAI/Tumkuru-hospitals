@@ -53,7 +53,7 @@ export async function POST(
     .from("leads")
     .update({
       digital_gap_score: scores.digitalGapScore,
-      commercial_fit_score: scores.commercialFitScore,
+      preview_readiness_score: scores.previewReadinessScore,
       score_breakdown: scores.breakdown as unknown as Json,
     })
     .eq("id", leadId);

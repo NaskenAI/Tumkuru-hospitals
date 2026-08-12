@@ -13,10 +13,19 @@ type OutreachResponse =
   | { ok: true; draft: Draft; previewUrl: string | null }
   | { ok: false; message: string };
 
+type Language = "en" | "kn" | "bilingual";
+
+const LANGUAGES: { value: Language; label: string }[] = [
+  { value: "en", label: "English" },
+  { value: "kn", label: "ಕನ್ನಡ" },
+  { value: "bilingual", label: "Bilingual" },
+];
+
 export function OutreachPanel({ leadId }: { leadId: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [language, setLanguage] = useState<Language>("en");
 
   async function generate() {
     setIsLoading(true);
@@ -25,7 +34,7 @@ export function OutreachPanel({ leadId }: { leadId: string }) {
       const response = await fetch(`/api/leads/${leadId}/outreach`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ language }),
       });
       const result = (await response.json()) as OutreachResponse;
       if (result.ok) {
@@ -45,15 +54,29 @@ export function OutreachPanel({ leadId }: { leadId: string }) {
         <h2 className="text-sm font-semibold text-slate-950">
           Outreach draft (human sends manually)
         </h2>
-        <button
-          type="button"
-          onClick={generate}
-          disabled={isLoading}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-sm font-medium text-white transition hover:bg-teal-800 disabled:bg-slate-300"
-        >
-          <Sparkles size={14} aria-hidden="true" />
-          {isLoading ? "Generating…" : "Generate draft"}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as Language)}
+            className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800"
+            aria-label="Outreach language"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={generate}
+            disabled={isLoading}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-sm font-medium text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+          >
+            <Sparkles size={14} aria-hidden="true" />
+            {isLoading ? "Generating…" : "Generate draft"}
+          </button>
+        </div>
       </div>
 
       {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}

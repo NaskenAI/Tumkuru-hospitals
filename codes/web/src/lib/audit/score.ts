@@ -1,5 +1,5 @@
 /**
- * Lead scoring — Digital Gap Score and Commercial Fit Score.
+ * Lead scoring — Digital Gap Score and Preview Readiness Score.
  *
  * Both scores are 0–100 and fully deterministic (no LLM involved).
  * Every point is explained in a breakdown object for transparency.
@@ -25,11 +25,11 @@ export type ScoreBreakdownItem = {
 
 export type LeadScores = {
   digitalGapScore: number;
-  commercialFitScore: number;
+  previewReadinessScore: number;
   priorityScore: number;
   breakdown: {
     digitalGap: ScoreBreakdownItem[];
-    commercialFit: ScoreBreakdownItem[];
+    previewReadiness: ScoreBreakdownItem[];
   };
 };
 
@@ -74,7 +74,7 @@ export function computeDigitalGapScore(
 }
 
 // ---------------------------------------------------------------------------
-// Commercial Fit Score (0–100)
+// Preview Readiness Score (0–100)
 // Higher = better fit for Nasken's preview offering
 // ---------------------------------------------------------------------------
 
@@ -85,7 +85,7 @@ type FactSummary = {
   verification_status: VerificationStatus;
 };
 
-export function computeCommercialFitScore(
+export function computePreviewReadinessScore(
   facts: FactSummary[],
   config: ScoringConfig = loadScoringConfig(),
 ): { score: number; breakdown: ScoreBreakdownItem[] } {
@@ -200,14 +200,14 @@ export function computeCommercialFitScore(
 
 export function computePriorityScore(
   digitalGapScore: number,
-  commercialFitScore: number,
+  previewReadinessScore: number,
   config: ScoringConfig = loadScoringConfig(),
 ): number {
   // Default weighting: 40% gap, 60% fit — hospitals that NEED help AND have
   // enough data. Both weights are configurable.
   return Math.round(
     digitalGapScore * config.priority.gapWeight +
-      commercialFitScore * config.priority.fitWeight,
+      previewReadinessScore * config.priority.fitWeight,
   );
 }
 
@@ -218,20 +218,20 @@ export function computeAllScores(input: {
 }): LeadScores {
   const config = input.config ?? loadScoringConfig();
   const digitalGap = computeDigitalGapScore(input.auditChecks, config);
-  const commercialFit = computeCommercialFitScore(input.facts, config);
+  const previewReadiness = computePreviewReadinessScore(input.facts, config);
   const priorityScore = computePriorityScore(
     digitalGap.score,
-    commercialFit.score,
+    previewReadiness.score,
     config,
   );
 
   return {
     digitalGapScore: digitalGap.score,
-    commercialFitScore: commercialFit.score,
+    previewReadinessScore: previewReadiness.score,
     priorityScore,
     breakdown: {
       digitalGap: digitalGap.breakdown,
-      commercialFit: commercialFit.breakdown,
+      previewReadiness: previewReadiness.breakdown,
     },
   };
 }

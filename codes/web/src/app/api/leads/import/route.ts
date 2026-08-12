@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { buildLeadInsertPayloads, parseLeadCsv } from "@/lib/leads/import-csv";
 import {
+  domainOf,
+  findPossibleDuplicates,
+} from "@/lib/leads/duplicate-detection";
+import {
   createSupabaseServiceClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/server";
@@ -55,9 +59,48 @@ export async function POST(request: NextRequest) {
 
   const payload = buildLeadInsertPayloads(parsed.records);
   const supabase = createSupabaseServiceClient();
-  // Cross-import duplicate detection: import_fingerprint is unique, so rows that
-  // were already imported (or repeat within this file) are skipped instead of
-  // creating duplicate leads.
+
+  // Cross-import fuzzy duplicate detection: compare each incoming row against
+  // existing leads on name/city/phone/domain. Exact re-imports are skipped by
+  // the unique import_fingerprint; fuzzy matches are FLAGGED (duplicate_of +
+  // duplicate_group), never auto-merged, so a human can decide.
+  const { data: existingLeads } = await supabase
+    .from("leads")
+    .select("id,normalized_name,normalized_city,known_phone,known_website");
+
+  const existing = (existingLeads ?? []).map((l) => ({
+    id: l.id,
+    normalizedName: l.normalized_name,
+    normalizedCity: l.normalized_city,
+    knownPhone: l.known_phone,
+    domain: domainOf(l.known_website),
+  }));
+
+  const possibleDuplicates: Array<{
+    hospital_name: string;
+    matches: ReturnType<typeof findPossibleDuplicates>;
+  }> = [];
+
+  parsed.records.forEach((record, i) => {
+    const matches = findPossibleDuplicates(
+      {
+        normalizedName: record.normalizedName,
+        normalizedCity: record.normalizedCity,
+        knownPhone: record.knownPhone,
+        domain: domainOf(record.knownWebsite),
+      },
+      existing,
+    );
+    if (matches.length > 0) {
+      const strong = matches.find((m) => m.confidence === "strong");
+      payload[i].duplicate_of = strong?.leadId ?? null;
+      payload[i].duplicate_group =
+        payload[i].duplicate_group ??
+        (strong ? "possible-duplicate" : "possible-duplicate-weak");
+      possibleDuplicates.push({ hospital_name: record.hospitalName, matches });
+    }
+  });
+
   const { data, error } = await supabase
     .from("leads")
     .upsert(payload, {
@@ -77,6 +120,7 @@ export async function POST(request: NextRequest) {
     parsed,
     inserted,
     skippedDuplicates: payload.length - inserted,
+    possibleDuplicates,
     leads: data ?? [],
   });
 }

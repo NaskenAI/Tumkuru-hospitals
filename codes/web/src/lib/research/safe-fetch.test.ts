@@ -28,6 +28,18 @@ describe("fetchPageText", () => {
     expect(result.rawHtml).toContain("<h1>ABC Hospital</h1>");
   });
 
+  it("extracts the page title as a source label", async () => {
+    const result = await fetchPageText("https://example.com", {
+      resolveHostname: publicResolver,
+      fetchImpl: async () =>
+        new Response(
+          "<html><head><title>ABC Hospital, Tumakuru</title></head><body>x</body></html>",
+          { status: 200, headers: { "content-type": "text/html" } },
+        ),
+    });
+    expect(result.title).toBe("ABC Hospital, Tumakuru");
+  });
+
   it("returns null rawHtml for non-HTML responses", async () => {
     const result = await fetchPageText("https://example.com/robots.txt", {
       resolveHostname: publicResolver,

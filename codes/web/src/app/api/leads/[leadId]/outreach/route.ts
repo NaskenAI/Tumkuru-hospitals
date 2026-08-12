@@ -22,7 +22,7 @@ function jsonError(message: string, status = 400) {
  * never sends anything — a human copies and sends manually (SCOPE_RULES).
  */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ leadId: string }> },
 ) {
   if (!isSupabaseConfigured()) {
@@ -32,13 +32,21 @@ export async function POST(
     return jsonError("LLM_API_KEY is not set.", 503);
   }
 
+  const body = (await request.json().catch(() => null)) as {
+    language?: unknown;
+  } | null;
+  const language =
+    body?.language === "kn" || body?.language === "bilingual"
+      ? body.language
+      : "en";
+
   const { leadId } = await context.params;
   const supabase = createSupabaseServiceClient();
 
   const { data: lead, error: leadError } = await supabase
     .from("leads")
     .select(
-      "id,hospital_name,city,digital_gap_score,commercial_fit_score",
+      "id,hospital_name,city,digital_gap_score,preview_readiness_score",
     )
     .eq("id", leadId)
     .single();
@@ -80,12 +88,13 @@ export async function POST(
       jobType: "generateOutreachDraft",
       execute: async () => {
         const llmResult = await generateOutreachDraft({
+          language,
           lead: {
             hospitalName: lead.hospital_name,
             city: lead.city,
             contactName: null,
             digitalGapScore: lead.digital_gap_score ?? 0,
-            commercialFitScore: lead.commercial_fit_score ?? 0,
+            previewReadinessScore: lead.preview_readiness_score ?? 0,
             previewUrl,
             gapHighlights,
           },

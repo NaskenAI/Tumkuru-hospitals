@@ -6,12 +6,16 @@ type PreviewAnalyticsProps = {
   slug: string;
 };
 
-function deviceCategory(): "mobile" | "desktop" {
-  if (typeof window === "undefined") return "desktop";
-  const coarse =
-    window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const narrow = window.innerWidth > 0 && window.innerWidth < 768;
-  return coarse || narrow ? "mobile" : "desktop";
+type DeviceCategory = "mobile" | "desktop" | "tablet_or_other";
+
+// Coarse only — pointer type + viewport width. No fingerprinting.
+function deviceCategory(): DeviceCategory {
+  if (typeof window === "undefined") return "tablet_or_other";
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  if (!coarse) return "desktop";
+  const width = window.innerWidth;
+  if (width > 0 && width < 768) return "mobile";
+  return "tablet_or_other";
 }
 
 function send(slug: string, event: string, device: string) {

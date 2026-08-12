@@ -13,7 +13,11 @@ type FactReviewControlsProps = {
     risk_tier: RiskTier;
     source_excerpt: string | null;
     verification_status: VerificationStatus;
-    source: { url: string | null; retrieved_at: string | null } | null;
+    source: {
+      url: string | null;
+      retrieved_at: string | null;
+      title: string | null;
+    } | null;
   };
 };
 
@@ -137,6 +141,9 @@ export function FactReviewControls({ fact }: FactReviewControlsProps) {
       {/* Provenance: where this fact came from (P0-7). */}
       <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
         <div className="font-medium text-slate-700">Provenance</div>
+        {fact.source?.title && (
+          <p className="mt-1 text-slate-700">{fact.source.title}</p>
+        )}
         {fact.source?.url ? (
           <a
             href={fact.source.url}

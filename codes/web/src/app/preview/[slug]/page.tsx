@@ -54,12 +54,13 @@ async function getPreviewData(slug: string) {
 
   if (!contentRow) return null;
 
-  // Log analytics event
+  // Log the server-side open. Device category is set by the client page_viewed
+  // event (the server cannot determine it without fingerprinting).
   await supabase.from("analytics_events").insert({
     lead_id: preview.lead_id,
     preview_id: preview.id,
     event: "preview_opened",
-    device_category: "unknown",
+    device_category: null,
   });
 
   return {

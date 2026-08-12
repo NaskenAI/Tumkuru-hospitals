@@ -214,7 +214,7 @@ describe("eval corpus", () => {
       `[corpus] ${fixtures.length} fixtures: ${goldenFixtures.length} golden, ` +
         `${adversarialFixtures.length} adversarial injection`,
     );
-    expect(goldenFixtures.length).toBeGreaterThanOrEqual(3);
+    expect(goldenFixtures.length).toBeGreaterThanOrEqual(10);
     expect(adversarialFixtures.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -217,6 +217,18 @@ export function checkOutdatedSignals(html: string): AuditCheckResult {
 }
 
 // ---------------------------------------------------------------------------
+// DEFERRED — not required for pilot
+//
+// Two audit checks are intentionally NOT implemented for the pilot:
+//   - Broken-link testing: would require fetching every outbound link, which
+//     re-opens the SSRF surface and is slow. Deferred.
+//   - Real load-time / performance testing: needs a headless browser + timing
+//     harness. Deferred.
+// These are documented as deferred rather than stubbed, so nothing implies they
+// work. The checks below all run against real fetched HTML.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Run all checks
 // ---------------------------------------------------------------------------
 
