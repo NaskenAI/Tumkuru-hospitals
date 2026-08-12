@@ -29,6 +29,7 @@ type FactRow = {
   source_excerpt: string | null;
   verification_status: VerificationStatus;
   created_at: string;
+  source: { url: string | null; retrieved_at: string | null } | null;
 };
 
 async function getLeadAndFacts(leadId: string): Promise<{
@@ -55,7 +56,7 @@ async function getLeadAndFacts(leadId: string): Promise<{
       supabase
         .from("hospital_facts")
         .select(
-          "id,fact_type,value,risk_tier,source_excerpt,verification_status,created_at",
+          "id,fact_type,value,risk_tier,source_excerpt,verification_status,created_at,source:sources(url,retrieved_at)",
         )
         .eq("lead_id", leadId)
         .order("created_at", { ascending: true }),
@@ -63,7 +64,7 @@ async function getLeadAndFacts(leadId: string): Promise<{
 
   return {
     lead: lead ?? null,
-    facts: facts ?? [],
+    facts: (facts as FactRow[] | null) ?? [],
     error: leadError?.message ?? factsError?.message ?? null,
   };
 }

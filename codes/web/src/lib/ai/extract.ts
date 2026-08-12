@@ -10,7 +10,11 @@ import { join } from "node:path";
 
 import type { LlmResult, LlmUsage } from "@/lib/ai/client";
 import { extractStructured, type LlmConfig } from "@/lib/ai/client";
-import { buildHospitalFactPayloads, type HospitalFactInsert } from "@/lib/extraction/facts";
+import {
+  buildHospitalFactPayloads,
+  type HospitalFactInsert,
+  type RejectedFact,
+} from "@/lib/extraction/facts";
 import {
   type ExtractionOutput,
   extractionOutputSchema,
@@ -50,6 +54,7 @@ async function loadPrompt(): Promise<{ system: string; userTemplate: string }> {
 export type ExtractionResult = {
   extraction: ExtractionOutput;
   factPayloads: HospitalFactInsert[];
+  rejectedFacts: RejectedFact[];
   usage: LlmUsage;
 };
 
@@ -75,15 +80,18 @@ export async function extractHospitalFacts(input: {
     config: input.config,
   });
 
-  const factPayloads = buildHospitalFactPayloads({
+  // Verify each excerpt against the very source text we sent to the model.
+  const { payloads, rejected } = buildHospitalFactPayloads({
     leadId: input.leadId,
     sourceId: input.sourceId,
     extraction: result.data,
+    sourceText: input.sourceText,
   });
 
   return {
     extraction: result.data,
-    factPayloads,
+    factPayloads: payloads,
+    rejectedFacts: rejected,
     usage: result.usage,
   };
 }

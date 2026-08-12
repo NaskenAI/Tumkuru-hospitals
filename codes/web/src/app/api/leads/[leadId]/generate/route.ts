@@ -66,22 +66,30 @@ export async function POST(
     },
   });
 
-  // Validate claims
-  const verifiedFactIds = facts.map((f) => f.id);
-  const validation = validateClaims(result, verifiedFactIds);
+  // Validate claims against the full verified facts (not just IDs).
+  const validation = validateClaims(result, facts);
 
   const contentStatus = validation.valid ? "EN_REVIEW_REQUIRED" : "BLOCKED";
 
-  // Save generated content
+  // Idempotent: one row per (lead, template). Regenerating English voids any
+  // prior human approvals and the previous Kannada translation.
   const { data: content, error: contentError } = await supabase
     .from("generated_content")
-    .insert({
-      lead_id: leadId,
-      template_key: templateKey,
-      content_en: result as unknown as Json,
-      status: contentStatus,
-      validation_report: validation as unknown as Json,
-    })
+    .upsert(
+      {
+        lead_id: leadId,
+        template_key: templateKey,
+        content_en: result as unknown as Json,
+        content_kn: null,
+        status: contentStatus,
+        validation_report: validation as unknown as Json,
+        en_approved_by: null,
+        en_approved_at: null,
+        kn_approved_by: null,
+        kn_approved_at: null,
+      },
+      { onConflict: "lead_id,template_key" },
+    )
     .select()
     .single();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Save, X } from "lucide-react";
+import { Check, ExternalLink, Save, X } from "lucide-react";
 import { useState } from "react";
 
 import type { Json, RiskTier, VerificationStatus } from "@/lib/database/types";
@@ -13,6 +13,7 @@ type FactReviewControlsProps = {
     risk_tier: RiskTier;
     source_excerpt: string | null;
     verification_status: VerificationStatus;
+    source: { url: string | null; retrieved_at: string | null } | null;
   };
 };
 
@@ -132,6 +133,32 @@ export function FactReviewControls({ fact }: FactReviewControlsProps) {
           onChange={(event) => setExcerpt(event.target.value)}
         />
       </label>
+
+      {/* Provenance: where this fact came from (P0-7). */}
+      <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="font-medium text-slate-700">Provenance</div>
+        {fact.source?.url ? (
+          <a
+            href={fact.source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1.5 break-all text-teal-700 hover:underline"
+          >
+            <ExternalLink size={12} aria-hidden="true" />
+            {fact.source.url}
+          </a>
+        ) : (
+          <p className="mt-1 text-slate-400">
+            No source URL (manually collected).
+          </p>
+        )}
+        <p className="mt-1 text-slate-500">
+          Retrieved:{" "}
+          {fact.source?.retrieved_at
+            ? new Date(fact.source.retrieved_at).toLocaleString()
+            : "—"}
+        </p>
+      </div>
 
       {message && <p className="mt-3 text-sm text-slate-500">{message}</p>}
     </div>

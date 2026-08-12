@@ -27,6 +27,12 @@ export function parseSafeHttpUrl(input: string | URL) {
     throw new UnsafeUrlError("Localhost URLs are not allowed.");
   }
 
+  // Restrict to standard web ports to shrink the SSRF surface (no odd internal
+  // service ports). Empty port means the protocol default (80/443).
+  if (url.port !== "" && url.port !== "80" && url.port !== "443") {
+    throw new UnsafeUrlError(`Port ${url.port} is not allowed.`);
+  }
+
   url.username = "";
   url.password = "";
   url.hash = "";

@@ -2,6 +2,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 import { PipelineActionButton } from "@/components/leads/pipeline-action-button";
+import { OutreachPanel } from "@/components/leads/outreach-panel";
 import {
   createSupabaseServiceClient,
   isSupabaseConfigured,
@@ -127,6 +128,18 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
   const verifiedCount = facts?.filter((f) => f.verification_status === "VERIFIED").length ?? 0;
   const hasAudit = (audits?.length ?? 0) > 0;
   const hasContent = (content?.length ?? 0) > 0;
+  const contentStatus = content?.[0]?.status ?? null;
+  const enApproved =
+    contentStatus === "EN_APPROVED" ||
+    contentStatus === "KN_REVIEW_REQUIRED" ||
+    contentStatus === "KN_APPROVED" ||
+    contentStatus === "VALIDATED";
+  const hasKannada =
+    contentStatus === "KN_REVIEW_REQUIRED" ||
+    contentStatus === "KN_APPROVED" ||
+    contentStatus === "VALIDATED";
+  const knApproved =
+    contentStatus === "KN_APPROVED" || contentStatus === "VALIDATED";
   const hasPreview = (previews?.length ?? 0) > 0;
   const previewSlug = previews?.[0]?.slug;
   const totalCost = (jobs ?? []).reduce((s, j) => s + Number(j.estimated_cost ?? 0), 0);
@@ -214,8 +227,8 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
 
           <StepCard
             title="5. Generate English Content"
-            status={hasContent ? (content![0].status === "BLOCKED" ? "error" : "done") : "pending"}
-            detail={hasContent ? `Template: ${content![0].template_key}, Status: ${content![0].status}` : "Not generated yet"}
+            status={hasContent ? (contentStatus === "BLOCKED" ? "error" : "done") : "pending"}
+            detail={hasContent ? `Template: ${content![0].template_key}, Status: ${contentStatus}` : "Not generated yet"}
           >
             <PipelineActionButton
               leadId={leadId}
@@ -226,29 +239,73 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
           </StepCard>
 
           <StepCard
-            title="6. Translate to Kannada"
-            status={hasContent && content![0].status === "KN_REVIEW_REQUIRED" ? "done" : "pending"}
-            detail={hasContent ? `Content status: ${content![0].status}` : "Generate English first"}
+            title="6. Approve English (human gate)"
+            status={enApproved ? "done" : hasContent ? "blocked" : "pending"}
+            detail={
+              enApproved
+                ? "English approved by a human reviewer."
+                : "Review the English preview, then approve before translation."
+            }
+          >
+            <PipelineActionButton
+              leadId={leadId}
+              action="approve-en"
+              label="Approve English"
+              disabled={!hasContent || contentStatus === "BLOCKED" || enApproved}
+            />
+          </StepCard>
+
+          <StepCard
+            title="7. Translate to Kannada"
+            status={hasKannada ? "done" : "pending"}
+            detail={
+              enApproved
+                ? `Content status: ${contentStatus}`
+                : "Approve English first"
+            }
           >
             <PipelineActionButton
               leadId={leadId}
               action="translate"
               label="Translate"
-              disabled={!hasContent}
+              disabled={!enApproved}
             />
           </StepCard>
 
           <StepCard
-            title="7. Deploy Preview"
-            status={hasPreview ? "done" : "pending"}
-            detail={hasPreview ? `Slug: ${previewSlug}` : "Not deployed yet"}
+            title="8. Approve Kannada (human gate)"
+            status={knApproved ? "done" : hasKannada ? "blocked" : "pending"}
+            detail={
+              knApproved
+                ? "Kannada approved by a human reviewer."
+                : "Review the Kannada preview, then approve before deploy."
+            }
+          >
+            <PipelineActionButton
+              leadId={leadId}
+              action="approve-kn"
+              label="Approve Kannada"
+              disabled={!hasKannada || knApproved}
+            />
+          </StepCard>
+
+          <StepCard
+            title="9. Deploy Preview"
+            status={hasPreview ? "done" : knApproved ? "pending" : "blocked"}
+            detail={
+              hasPreview
+                ? `Slug: ${previewSlug}`
+                : knApproved
+                  ? "Ready to deploy."
+                  : "Deploy is locked until English and Kannada are approved."
+            }
           >
             <div className="flex gap-2">
               <PipelineActionButton
                 leadId={leadId}
                 action="deploy"
                 label="Deploy"
-                disabled={!hasContent}
+                disabled={!knApproved}
               />
               {previewSlug && (
                 <a
@@ -264,6 +321,9 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
             </div>
           </StepCard>
         </div>
+
+        {/* Outreach drafts (generated only; never sent automatically) */}
+        <OutreachPanel leadId={leadId} />
 
         {/* Job history */}
         {jobs && jobs.length > 0 && (

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { PreviewRenderer } from "@/components/preview/preview-renderer";
+import { PreviewAnalytics } from "@/components/preview/preview-analytics";
 import type { GeneratedContent } from "@/lib/content/content-schema";
 import type { TemplateKey } from "@/lib/content/content-schema";
 import {
@@ -17,9 +18,7 @@ type PreviewPageProps = {
   searchParams: Promise<{ lang?: string }>;
 };
 
-export async function generateMetadata({
-  params,
-}: PreviewPageProps): Promise<Metadata> {
+export async function generateMetadata(): Promise<Metadata> {
   return {
     robots: { index: false, follow: false },
     title: "Hospital Preview — Nasken AI",
@@ -89,6 +88,7 @@ export default async function PreviewPage({ params, searchParams }: PreviewPageP
   return (
     <>
       <meta name="robots" content="noindex, nofollow" />
+      <PreviewAnalytics slug={slug} />
       <div className="min-h-screen bg-white">
         {/* Disclaimer banner */}
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-3">

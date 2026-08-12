@@ -22,6 +22,24 @@ describe("fetchPageText", () => {
     });
 
     expect(result.rawText).toBe("ABC Hospital Phone 9876543210");
+    // Raw HTML is preserved for the website audit (tags survive even though
+    // the text extractor strips them).
+    expect(result.rawHtml).toContain("<script>");
+    expect(result.rawHtml).toContain("<h1>ABC Hospital</h1>");
+  });
+
+  it("returns null rawHtml for non-HTML responses", async () => {
+    const result = await fetchPageText("https://example.com/robots.txt", {
+      resolveHostname: publicResolver,
+      fetchImpl: async () =>
+        new Response("User-agent: *", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+    });
+
+    expect(result.rawText).toBe("User-agent: *");
+    expect(result.rawHtml).toBeNull();
   });
 
   it("blocks redirects to unsafe URLs", async () => {

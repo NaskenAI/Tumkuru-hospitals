@@ -47,6 +47,14 @@ export async function POST(
     return jsonError("English content is empty.", 422);
   }
 
+  // Gate: English must be human-approved before we spend tokens translating it.
+  if (contentRow.status !== "EN_APPROVED" && contentRow.status !== "KN_REVIEW_REQUIRED" && contentRow.status !== "KN_APPROVED") {
+    return jsonError(
+      `English content must be approved before translation (current status: ${contentRow.status}).`,
+      409,
+    );
+  }
+
   const englishContent = contentRow.content_en as unknown as GeneratedContent;
 
   // Translate with job tracking

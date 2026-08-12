@@ -19,6 +19,18 @@ describe("safe URL checks", () => {
     );
   });
 
+  it("rejects non-standard ports", () => {
+    expect(() => parseSafeHttpUrl("http://example.com:8080/")).toThrow(
+      "Port 8080 is not allowed.",
+    );
+    expect(() => parseSafeHttpUrl("http://example.com:22/")).toThrow(
+      "not allowed",
+    );
+    // Standard ports and the default are fine.
+    expect(() => parseSafeHttpUrl("https://example.com:443/")).not.toThrow();
+    expect(() => parseSafeHttpUrl("http://example.com/")).not.toThrow();
+  });
+
   it("detects private and reserved addresses", () => {
     expect(isPrivateOrReservedAddress("127.0.0.1")).toBe(true);
     expect(isPrivateOrReservedAddress("10.10.10.10")).toBe(true);

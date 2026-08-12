@@ -3,6 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Json } from "@/lib/database/types";
 import { generatePreviewSlug, computeStaleAfter } from "@/lib/preview/slug";
 import { validateClaims } from "@/lib/content/claim-validator";
+import { validateKannada } from "@/lib/content/kannada-validator";
+import {
+  evaluateDeployState,
+  evaluateDeployValidation,
+} from "@/lib/content/content-workflow";
 import type { GeneratedContent } from "@/lib/content/content-schema";
 import {
   createSupabaseServiceClient,
@@ -45,35 +50,71 @@ export async function POST(
     return jsonError("No generated content found.", 404);
   }
 
-  if (contentRow.status === "BLOCKED") {
-    return jsonError("Content is blocked due to failed claim validation.", 422);
+  // Deploy gate (P0-4/P0-5): only fully human-approved bilingual content ships.
+  const stateGate = evaluateDeployState({
+    status: contentRow.status,
+    hasEnglish: Boolean(contentRow.content_en),
+    hasKannada: Boolean(contentRow.content_kn),
+  });
+  if (!stateGate.ok) {
+    return jsonError(stateGate.reason, stateGate.code);
   }
 
-  // Re-validate claims one more time
+  // Re-validate everything one final time before it goes external.
   const content = contentRow.content_en as unknown as GeneratedContent;
+  const kannada = contentRow.content_kn as unknown as GeneratedContent;
   const { data: verifiedFacts } = await supabase
     .from("hospital_facts")
-    .select("id")
+    .select("id,fact_type,value,source_excerpt")
     .eq("lead_id", leadId)
     .eq("verification_status", "VERIFIED");
 
-  const verifiedIds = (verifiedFacts ?? []).map((f) => f.id);
-  const validation = validateClaims(content, verifiedIds);
+  const facts = verifiedFacts ?? [];
+  const verifiedIds = facts.map((f) => f.id);
+  const validation = validateClaims(content, facts);
+  const kannadaValidation = validateKannada(content, kannada, verifiedIds);
 
-  if (!validation.valid) {
-    // Update content to BLOCKED
+  const validationGate = evaluateDeployValidation({
+    englishValid: validation.valid,
+    kannadaValid: kannadaValidation.valid,
+  });
+  if (!validationGate.ok) {
     await supabase
       .from("generated_content")
       .update({
         status: "BLOCKED",
-        validation_report: validation as unknown as Json,
+        validation_report: {
+          english: validation,
+          kannada: kannadaValidation,
+        } as unknown as Json,
       })
       .eq("id", contentRow.id);
 
     return jsonError(
-      `Claim validation failed: ${validation.issues.length} issues. Preview blocked.`,
+      `Validation failed before deploy: ${validation.issues.length} English + ${kannadaValidation.issues.length} Kannada issue(s). Preview blocked.`,
       422,
     );
+  }
+
+  // Idempotent: reuse an existing live preview for this content instead of
+  // stacking duplicates on repeated deploy clicks.
+  const { data: existingPreview } = await supabase
+    .from("previews")
+    .select("id,slug,status")
+    .eq("generated_content_id", contentRow.id)
+    .neq("status", "REMOVED")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingPreview) {
+    return NextResponse.json({
+      ok: true,
+      preview: existingPreview,
+      previewUrl: `/preview/${existingPreview.slug}`,
+      validation,
+      reused: true,
+    });
   }
 
   // Generate slug and create preview
