@@ -22,6 +22,7 @@ Phase 1 foundation is started:
 ```bash
 npm run dev
 npm run test
+npm run eval        # offline extractor/guardrail evaluation (P0-6)
 npm run lint
 npm run typecheck
 npm run build
@@ -35,20 +36,43 @@ http://localhost:3000/admin
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill the Supabase keys before doing a
-real database import.
+Copy `.env.example` to `.env.local` and fill it in.
 
-Dry-run CSV parsing works without Supabase.
+**Admin auth is required.** `/admin/*` and internal `/api/*` are locked behind a
+password sign-in at `/admin/login`. Set both:
+
+- `ADMIN_PASSWORD` — the shared sign-in password
+- `ADMIN_SESSION_SECRET` — random string for signing the session cookie
+  (`openssl rand -hex 32`)
+
+If these are unset, the admin console and APIs stay locked. The public
+`/preview/[slug]` pages and the analytics ingest endpoint stay reachable.
+
+Fill the Supabase keys before doing a real database import. Dry-run CSV parsing
+works without Supabase.
+
+## Human approval gates
+
+Content cannot deploy until a human approves both languages:
+
+```text
+generate → EN_REVIEW_REQUIRED → (approve EN) → EN_APPROVED
+        → translate → KN_REVIEW_REQUIRED → (approve KN) → KN_APPROVED → deploy
+```
+
+Deploy is blocked unless status is `KN_APPROVED`, both languages exist, and
+English + Kannada re-pass validation. Claim validation is deterministic: every
+factual claim must cite verified facts, avoid banned superlatives, and use only
+numbers/names present in its supporting facts.
 
 ## Database
 
-The first migration is:
+Apply both migrations before turning off dry run in the import UI:
 
 ```text
 supabase/migrations/0001_initial_pipeline_schema.sql
+supabase/migrations/0002_add_raw_html_and_constraints.sql
 ```
-
-Apply it to the Supabase project before turning off dry run in the import UI.
 
 ## CSV Format
 

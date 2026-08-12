@@ -33,7 +33,9 @@ export type TemplateKey = "clinic" | "specialty" | "multispecialty";
 export type ContentStatus =
   | "DRAFT"
   | "EN_REVIEW_REQUIRED"
+  | "EN_APPROVED"
   | "KN_REVIEW_REQUIRED"
+  | "KN_APPROVED"
   | "VALIDATED"
   | "BLOCKED";
 
@@ -125,6 +127,7 @@ export type Database = {
           http_status: number | null;
           content_hash: string | null;
           raw_text: string | null;
+          raw_html: string | null;
           raw_text_expires_at: string | null;
           notes: string | null;
           created_at: string;
@@ -138,6 +141,7 @@ export type Database = {
           http_status?: number | null;
           content_hash?: string | null;
           raw_text?: string | null;
+          raw_html?: string | null;
           raw_text_expires_at?: string | null;
           notes?: string | null;
           created_at?: string;
@@ -245,6 +249,10 @@ export type Database = {
           content_kn: Json | null;
           status: ContentStatus;
           validation_report: Json;
+          en_approved_by: string | null;
+          en_approved_at: string | null;
+          kn_approved_by: string | null;
+          kn_approved_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -256,6 +264,10 @@ export type Database = {
           content_kn?: Json | null;
           status?: ContentStatus;
           validation_report?: Json;
+          en_approved_by?: string | null;
+          en_approved_at?: string | null;
+          kn_approved_by?: string | null;
+          kn_approved_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };

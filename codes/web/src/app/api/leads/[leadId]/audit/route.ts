@@ -44,13 +44,15 @@ export async function POST(
   if (websiteUrl) {
     const { data: source } = await supabase
       .from("sources")
-      .select("raw_text,http_status")
+      .select("raw_html,raw_text,http_status")
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
 
-    rawHtml = source?.raw_text ?? null;
+    // Prefer real HTML (needed for structural checks); fall back to the
+    // text-only snapshot for sources collected before raw_html existed.
+    rawHtml = source?.raw_html ?? source?.raw_text ?? null;
     httpStatus = source?.http_status ?? null;
   }
 

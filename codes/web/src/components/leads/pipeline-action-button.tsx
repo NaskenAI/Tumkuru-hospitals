@@ -1,11 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Play } from "lucide-react";
+
+type Action =
+  | "extract"
+  | "audit"
+  | "score"
+  | "generate"
+  | "translate"
+  | "approve-en"
+  | "approve-kn"
+  | "deploy";
 
 type PipelineActionButtonProps = {
   leadId: string;
-  action: "extract" | "audit" | "score" | "generate" | "translate" | "deploy";
+  action: Action;
   label: string;
   disabled?: boolean;
 };
@@ -14,13 +25,18 @@ type ActionResponse =
   | { ok: true; [key: string]: unknown }
   | { ok: false; message: string };
 
-const actionPaths: Record<PipelineActionButtonProps["action"], string> = {
-  extract: "extract",
-  audit: "audit",
-  score: "score",
-  generate: "generate",
-  translate: "translate",
-  deploy: "deploy",
+const actionConfig: Record<
+  Action,
+  { path: string; body?: Record<string, unknown> }
+> = {
+  extract: { path: "extract" },
+  audit: { path: "audit" },
+  score: { path: "score" },
+  generate: { path: "generate" },
+  translate: { path: "translate" },
+  "approve-en": { path: "content/approve", body: { stage: "EN" } },
+  "approve-kn": { path: "content/approve", body: { stage: "KN" } },
+  deploy: { path: "deploy" },
 };
 
 export function PipelineActionButton({
@@ -29,6 +45,7 @@ export function PipelineActionButton({
   label,
   disabled = false,
 }: PipelineActionButtonProps) {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -36,20 +53,21 @@ export function PipelineActionButton({
     setIsLoading(true);
     setMessage(null);
 
+    const config = actionConfig[action];
+
     try {
-      const response = await fetch(
-        `/api/leads/${leadId}/${actionPaths[action]}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({}),
-        },
-      );
+      const response = await fetch(`/api/leads/${leadId}/${config.path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(config.body ?? {}),
+      });
 
       const result = (await response.json()) as ActionResponse;
 
       if (result.ok) {
         setMessage("Done ✓");
+        // Reflect new pipeline/content status without a full reload.
+        router.refresh();
       } else {
         setMessage(result.message);
       }

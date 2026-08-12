@@ -6,6 +6,10 @@
  */
 
 import type { AuditCheckResult } from "@/lib/audit/checks";
+import {
+  loadScoringConfig,
+  type ScoringConfig,
+} from "@/lib/audit/scoring-config";
 import type { Json, RiskTier, VerificationStatus } from "@/lib/database/types";
 
 // ---------------------------------------------------------------------------
@@ -34,23 +38,11 @@ export type LeadScores = {
 // Higher = bigger gap = more opportunity for Nasken
 // ---------------------------------------------------------------------------
 
-const auditCheckWeights: Record<string, number> = {
-  website_exists: 20,
-  https: 5,
-  mobile_viewport: 15,
-  title_tag: 5,
-  meta_description: 5,
-  call_cta: 10,
-  appointment_cta: 15,
-  whatsapp_directions: 5,
-  doctors_listed: 5,
-  specialties_listed: 5,
-  not_outdated: 10,
-};
-
 export function computeDigitalGapScore(
   auditChecks: AuditCheckResult[],
+  config: ScoringConfig = loadScoringConfig(),
 ): { score: number; breakdown: ScoreBreakdownItem[] } {
+  const auditCheckWeights = config.auditWeights;
   const breakdown: ScoreBreakdownItem[] = [];
   let totalGap = 0;
 
@@ -95,7 +87,9 @@ type FactSummary = {
 
 export function computeCommercialFitScore(
   facts: FactSummary[],
+  config: ScoringConfig = loadScoringConfig(),
 ): { score: number; breakdown: ScoreBreakdownItem[] } {
+  const w = config.fit;
   const breakdown: ScoreBreakdownItem[] = [];
   let score = 0;
 
@@ -106,34 +100,34 @@ export function computeCommercialFitScore(
 
   // Has hospital name
   const hasName = factTypes.has("HOSPITAL_NAME");
-  const namePoints = hasName ? 10 : 0;
+  const namePoints = hasName ? w.name : 0;
   score += namePoints;
   breakdown.push({
     label: "Hospital name verified",
     points: namePoints,
-    maxPoints: 10,
+    maxPoints: w.name,
     reason: hasName ? "Name is confirmed." : "Name not verified.",
   });
 
   // Has phone
   const hasPhone = factTypes.has("PHONE");
-  const phonePoints = hasPhone ? 10 : 0;
+  const phonePoints = hasPhone ? w.phone : 0;
   score += phonePoints;
   breakdown.push({
     label: "Phone verified",
     points: phonePoints,
-    maxPoints: 10,
+    maxPoints: w.phone,
     reason: hasPhone ? "Contact phone available." : "No verified phone.",
   });
 
   // Has address
   const hasAddress = factTypes.has("ADDRESS");
-  const addressPoints = hasAddress ? 10 : 0;
+  const addressPoints = hasAddress ? w.address : 0;
   score += addressPoints;
   breakdown.push({
     label: "Address verified",
     points: addressPoints,
-    maxPoints: 10,
+    maxPoints: w.address,
     reason: hasAddress ? "Physical address confirmed." : "No verified address.",
   });
 
@@ -141,12 +135,12 @@ export function computeCommercialFitScore(
   const specialtyCount = verifiedFacts.filter(
     (f) => f.fact_type === "SPECIALTY",
   ).length;
-  const specialtyPoints = Math.min(20, specialtyCount * 5);
+  const specialtyPoints = Math.min(w.specialtyMax, specialtyCount * w.specialtyPer);
   score += specialtyPoints;
   breakdown.push({
     label: "Specialties",
     points: specialtyPoints,
-    maxPoints: 20,
+    maxPoints: w.specialtyMax,
     reason: `${specialtyCount} verified specialties.`,
   });
 
@@ -154,12 +148,12 @@ export function computeCommercialFitScore(
   const doctorCount = verifiedFacts.filter(
     (f) => f.fact_type === "DOCTOR",
   ).length;
-  const doctorPoints = Math.min(15, doctorCount * 5);
+  const doctorPoints = Math.min(w.doctorMax, doctorCount * w.doctorPer);
   score += doctorPoints;
   breakdown.push({
     label: "Doctors listed",
     points: doctorPoints,
-    maxPoints: 15,
+    maxPoints: w.doctorMax,
     reason: `${doctorCount} verified doctors.`,
   });
 
@@ -167,33 +161,33 @@ export function computeCommercialFitScore(
   const serviceCount = verifiedFacts.filter(
     (f) => f.fact_type === "SERVICE",
   ).length;
-  const servicePoints = Math.min(15, serviceCount * 3);
+  const servicePoints = Math.min(w.serviceMax, serviceCount * w.servicePer);
   score += servicePoints;
   breakdown.push({
     label: "Services listed",
     points: servicePoints,
-    maxPoints: 15,
+    maxPoints: w.serviceMax,
     reason: `${serviceCount} verified services.`,
   });
 
   // Has hours
   const hasHours = factTypes.has("HOURS");
-  const hoursPoints = hasHours ? 10 : 0;
+  const hoursPoints = hasHours ? w.hours : 0;
   score += hoursPoints;
   breakdown.push({
     label: "Hours verified",
     points: hoursPoints,
-    maxPoints: 10,
+    maxPoints: w.hours,
     reason: hasHours ? "Operating hours available." : "No verified hours.",
   });
 
   // Total fact count bonus
-  const richness = Math.min(10, Math.floor(verifiedFacts.length / 2));
+  const richness = Math.min(w.richnessMax, Math.floor(verifiedFacts.length / 2));
   score += richness;
   breakdown.push({
     label: "Data richness bonus",
     points: richness,
-    maxPoints: 10,
+    maxPoints: w.richnessMax,
     reason: `${verifiedFacts.length} total verified facts.`,
   });
 
@@ -207,20 +201,28 @@ export function computeCommercialFitScore(
 export function computePriorityScore(
   digitalGapScore: number,
   commercialFitScore: number,
+  config: ScoringConfig = loadScoringConfig(),
 ): number {
-  // Weight: 40% gap, 60% fit — we want hospitals that NEED help AND have enough data
-  return Math.round(digitalGapScore * 0.4 + commercialFitScore * 0.6);
+  // Default weighting: 40% gap, 60% fit — hospitals that NEED help AND have
+  // enough data. Both weights are configurable.
+  return Math.round(
+    digitalGapScore * config.priority.gapWeight +
+      commercialFitScore * config.priority.fitWeight,
+  );
 }
 
 export function computeAllScores(input: {
   auditChecks: AuditCheckResult[];
   facts: FactSummary[];
+  config?: ScoringConfig;
 }): LeadScores {
-  const digitalGap = computeDigitalGapScore(input.auditChecks);
-  const commercialFit = computeCommercialFitScore(input.facts);
+  const config = input.config ?? loadScoringConfig();
+  const digitalGap = computeDigitalGapScore(input.auditChecks, config);
+  const commercialFit = computeCommercialFitScore(input.facts, config);
   const priorityScore = computePriorityScore(
     digitalGap.score,
     commercialFit.score,
+    config,
   );
 
   return {

@@ -55,20 +55,28 @@ export async function POST(request: NextRequest) {
 
   const payload = buildLeadInsertPayloads(parsed.records);
   const supabase = createSupabaseServiceClient();
+  // Cross-import duplicate detection: import_fingerprint is unique, so rows that
+  // were already imported (or repeat within this file) are skipped instead of
+  // creating duplicate leads.
   const { data, error } = await supabase
     .from("leads")
-    .insert(payload)
+    .upsert(payload, {
+      onConflict: "import_fingerprint",
+      ignoreDuplicates: true,
+    })
     .select("id,hospital_name,status,duplicate_group");
 
   if (error) {
     return jsonError(error.message, 500);
   }
 
+  const inserted = data?.length ?? 0;
   return NextResponse.json({
     ok: true,
     dryRun: false,
     parsed,
-    inserted: data?.length ?? 0,
+    inserted,
+    skippedDuplicates: payload.length - inserted,
     leads: data ?? [],
   });
 }

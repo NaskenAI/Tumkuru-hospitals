@@ -46,32 +46,39 @@ export async function POST(
   }
 
   const supabase = createSupabaseServiceClient();
-  const sourceId =
-    parsedRequest.data.sourceId ?? (await getLatestSourceId(supabase, leadId));
+  const source =
+    parsedRequest.data.sourceId != null
+      ? await getSourceById(supabase, parsedRequest.data.sourceId)
+      : await getLatestSource(supabase, leadId);
 
-  if (!sourceId) {
+  if (!source) {
     return jsonError("No source snapshot found for this lead.", 404);
   }
 
   try {
     const extraction = parseExtractionOutput(parsedRequest.data.extraction);
-    const payload = buildHospitalFactPayloads({
+    const { payloads, rejected } = buildHospitalFactPayloads({
       leadId,
-      sourceId,
+      sourceId: source.id,
       extraction,
+      sourceText: source.raw_text,
     });
 
-    if (payload.length === 0) {
+    if (payloads.length === 0) {
       return NextResponse.json({
         ok: true,
         inserted: 0,
-        message: "Extraction contained no facts.",
+        rejected,
+        message:
+          rejected.length > 0
+            ? "All facts were rejected: excerpts not found in source text."
+            : "Extraction contained no facts.",
       });
     }
 
     const { data, error } = await supabase
       .from("hospital_facts")
-      .insert(payload)
+      .insert(payloads)
       .select("id,fact_type,risk_tier,verification_status");
 
     if (error) {
@@ -86,6 +93,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       inserted: data?.length ?? 0,
+      rejected,
       facts: data ?? [],
     });
   } catch (error) {
@@ -96,13 +104,32 @@ export async function POST(
   }
 }
 
-async function getLatestSourceId(
+type SourceRef = { id: string; raw_text: string | null };
+
+async function getSourceById(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
-  leadId: string,
-) {
+  sourceId: string,
+): Promise<SourceRef | null> {
   const { data, error } = await supabase
     .from("sources")
-    .select("id")
+    .select("id,raw_text")
+    .eq("id", sourceId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
+async function getLatestSource(
+  supabase: ReturnType<typeof createSupabaseServiceClient>,
+  leadId: string,
+): Promise<SourceRef | null> {
+  const { data, error } = await supabase
+    .from("sources")
+    .select("id,raw_text")
     .eq("lead_id", leadId)
     .order("retrieved_at", { ascending: false, nullsFirst: false })
     .limit(1)
@@ -112,5 +139,5 @@ async function getLatestSourceId(
     throw new Error(error.message);
   }
 
-  return data?.id ?? null;
+  return data ?? null;
 }

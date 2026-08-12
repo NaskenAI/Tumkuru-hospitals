@@ -1,12 +1,7 @@
-import {
-  BarChart3,
-  ClipboardCheck,
-  Database,
-  FileSpreadsheet,
-  Globe,
-  ShieldCheck,
-} from "lucide-react";
+import { Database, FileSpreadsheet, Globe, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+
+import { LogoutButton } from "@/components/admin/logout-button";
 
 const navCards = [
   {
@@ -29,17 +24,20 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
-        <header>
-          <p className="text-sm font-medium text-teal-700">
-            Nasken AI · Tumakuru Pilot
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-            Admin Dashboard
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Hospital preview pipeline — manage leads, review facts, generate
-            previews.
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-teal-700">
+              Nasken AI · Tumakuru Pilot
+            </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+              Admin Dashboard
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Hospital preview pipeline — manage leads, review facts, generate
+              previews.
+            </p>
+          </div>
+          <LogoutButton />
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2">
@@ -79,8 +77,8 @@ export default function AdminPage() {
                   <li>3. Extract facts with LLM</li>
                   <li>4. Human review (approve/edit/reject)</li>
                   <li>5. Audit website + score lead</li>
-                  <li>6. Generate English content</li>
-                  <li>7. Translate to Kannada</li>
+                  <li>6. Generate English → approve English</li>
+                  <li>7. Translate to Kannada → approve Kannada</li>
                   <li>8. Deploy preview with disclaimer</li>
                 </ol>
               </div>

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { extractHospitalFacts } from "@/lib/ai/extract";
+import { filterNewFactPayloads } from "@/lib/extraction/facts";
 import { isLlmConfigured } from "@/lib/ai/client";
 import { runJobWithTracking } from "@/lib/jobs/runner";
 import {
@@ -37,7 +38,7 @@ export async function POST(
   // Get the latest source with raw text
   const { data: source, error: sourceError } = await supabase
     .from("sources")
-    .select("id,raw_text")
+    .select("id,raw_text,http_status")
     .eq("lead_id", leadId)
     .not("raw_text", "is", null)
     .order("created_at", { ascending: false })
@@ -48,6 +49,14 @@ export async function POST(
     return jsonError(
       "No source text found. Collect a source first.",
       404,
+    );
+  }
+
+  // Do not extract facts from an error page (non-2xx response).
+  if (source.http_status !== null && source.http_status >= 400) {
+    return jsonError(
+      `Latest source returned HTTP ${source.http_status}; re-collect a healthy source before extracting.`,
+      422,
     );
   }
 
@@ -65,11 +74,26 @@ export async function POST(
     },
   });
 
+  // Idempotency: skip facts already stored for this source (same fact_type +
+  // excerpt) so re-running extraction never duplicates rows or clobbers a
+  // human's verify/reject decision on an existing fact.
+  const { data: existingFacts } = await supabase
+    .from("hospital_facts")
+    .select("fact_type,source_excerpt")
+    .eq("lead_id", leadId)
+    .eq("source_id", source.id);
+
+  const newPayloads = filterNewFactPayloads(
+    existingFacts ?? [],
+    result.factPayloads,
+  );
+  const skippedExisting = result.factPayloads.length - newPayloads.length;
+
   // Insert facts
-  if (result.factPayloads.length > 0) {
+  if (newPayloads.length > 0) {
     const { error: insertError } = await supabase
       .from("hospital_facts")
-      .insert(result.factPayloads);
+      .insert(newPayloads);
 
     if (insertError) {
       return jsonError(`Failed to save facts: ${insertError.message}`, 500);
@@ -84,7 +108,10 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
-    factsExtracted: result.factPayloads.length,
+    factsExtracted: newPayloads.length,
+    factsSkippedExisting: skippedExisting,
+    factsRejected: result.rejectedFacts.length,
+    rejectedFacts: result.rejectedFacts,
     usage: result.usage,
   });
 }

@@ -23,12 +23,14 @@ describe("source collection", () => {
         finalUrl: "https://example.com",
         httpStatus: 200,
         rawText: "ABC Hospital",
+        rawHtml: "<html><body><h1>ABC Hospital</h1></body></html>",
       },
     );
 
     expect(snapshot.lead_id).toBe("lead-1");
     expect(snapshot.content_hash).toHaveLength(64);
     expect(snapshot.raw_text_expires_at).toBe("2026-08-24T00:00:00.000Z");
+    expect(snapshot.raw_html).toContain("<h1>ABC Hospital</h1>");
   });
 
   it("collects visible source text through the safe fetcher", async () => {
@@ -51,5 +53,6 @@ describe("source collection", () => {
 
     expect(snapshot.url).toBe("https://example.com/");
     expect(snapshot.raw_text).toBe("ABC Hospital");
+    expect(snapshot.raw_html).toBe("<main>ABC Hospital</main>");
   });
 });
