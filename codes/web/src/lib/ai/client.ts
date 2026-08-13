@@ -22,7 +22,10 @@ export type LlmConfig = {
 };
 
 const defaultModel = DEFAULT_MODEL;
-const defaultMaxTokens = 4096;
+// Gemini 3.x "thinking" tokens count against maxOutputTokens. 4096 left too
+// little room for the actual JSON on content-generation tasks (the output was
+// truncated mid-object → invalid JSON). Give thinking + output headroom.
+const defaultMaxTokens = 8192;
 const defaultTemperature = 0.1;
 
 function getConfig(overrides?: Partial<LlmConfig>): LlmConfig {
@@ -48,6 +51,8 @@ export type LlmUsage = {
   model: string;
   promptTokens: number;
   completionTokens: number;
+  /** Gemini 3.x "thinking" tokens — billed as output, reported separately. */
+  thoughtsTokens: number;
   totalTokens: number;
   estimatedCostUsd: number;
   estimatedCostInr: number;
@@ -74,6 +79,7 @@ type GeminiResponse = {
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
     totalTokenCount?: number;
   };
 };
@@ -88,15 +94,25 @@ function extractTextFromResponse(response: GeminiResponse): string {
 }
 
 function buildUsage(model: string, response: GeminiResponse): LlmUsage {
-  const promptTokens = response.usageMetadata?.promptTokenCount ?? 0;
-  const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-  const totalTokens = response.usageMetadata?.totalTokenCount ?? 0;
+  const meta = response.usageMetadata ?? {};
+  const promptTokens = meta.promptTokenCount ?? 0;
+  const completionTokens = meta.candidatesTokenCount ?? 0;
+  const totalTokens = meta.totalTokenCount ?? 0;
 
-  const cost = estimateCost(model, promptTokens, completionTokens);
+  // Gemini 3.x "thinking" tokens are billed as output but are NOT included in
+  // candidatesTokenCount. Count them as output so cost is not undercounted;
+  // fall back to (total - prompt - completion) if the field is absent.
+  const thoughtsTokens =
+    meta.thoughtsTokenCount ??
+    Math.max(0, totalTokens - promptTokens - completionTokens);
+  const billedOutputTokens = completionTokens + thoughtsTokens;
+
+  const cost = estimateCost(model, promptTokens, billedOutputTokens);
   return {
     model,
     promptTokens,
     completionTokens,
+    thoughtsTokens,
     totalTokens,
     estimatedCostUsd: cost.estimatedCostUsd,
     estimatedCostInr: cost.estimatedCostInr,

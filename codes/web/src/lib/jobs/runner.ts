@@ -157,11 +157,23 @@ export async function getTotalCostForLead(
 /**
  * Check if spending is within configured caps.
  */
+// Only these job types actually call the LLM and count against the caps.
+// Non-LLM jobs (audit, score, deploy, screenshots) must never be blocked by an
+// LLM budget they don't consume.
+export const LLM_JOB_TYPES = new Set<JobType>([
+  "extractFacts",
+  "generateContent",
+  "translateContent",
+  "generateOutreachDraft",
+]);
+
 export function checkCostCaps(input: {
   totalTokens: number;
   totalCostInr: number;
 }): { withinCaps: boolean; reason: string | null } {
-  const tokenCap = Number(process.env.AI_TOKEN_CAP_PER_LEAD ?? 20000);
+  // A full hospital run (extract + generate + translate + outreach) with
+  // Gemini 3.x thinking tokens is ~25-35k tokens; keep the default above that.
+  const tokenCap = Number(process.env.AI_TOKEN_CAP_PER_LEAD ?? 50000);
   const costCap = Number(process.env.AI_COST_CAP_PER_RUN_INR ?? 250);
 
   if (input.totalTokens > tokenCap) {
@@ -198,12 +210,14 @@ export async function runJobWithTracking<T>(input: {
   await startJob(job.id);
 
   try {
-    // Check cost caps before running
-    const costs = await getTotalCostForLead(input.leadId);
-    const caps = checkCostCaps(costs);
-    if (!caps.withinCaps) {
-      await failJob(job.id, caps.reason!);
-      throw new Error(caps.reason!);
+    // Enforce spend caps only for jobs that actually call the LLM.
+    if (LLM_JOB_TYPES.has(input.jobType)) {
+      const costs = await getTotalCostForLead(input.leadId);
+      const caps = checkCostCaps(costs);
+      if (!caps.withinCaps) {
+        await failJob(job.id, caps.reason!);
+        throw new Error(caps.reason!);
+      }
     }
 
     const { result, usage } = await input.execute();

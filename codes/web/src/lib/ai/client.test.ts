@@ -54,6 +54,35 @@ describe("Gemini structured-output request", () => {
     expect(result.usage.pricingVersion).toMatch(/2026-08/);
   });
 
+  it("counts Gemini 3.x thinking tokens as billed output", async () => {
+    process.env.LLM_API_KEY = "test-key";
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: '{"n":1}' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              thoughtsTokenCount: 100,
+              totalTokenCount: 115,
+            },
+          }),
+          { status: 200 },
+        ),
+    ) as typeof fetch;
+
+    const r = await extractStructured({
+      systemPrompt: "s",
+      userPrompt: "u",
+      schema: z.object({ n: z.number() }),
+    });
+    expect(r.usage.thoughtsTokens).toBe(100);
+    // billed output = candidates(5) + thoughts(100) = 105
+    const expectedUsd = (10 * 1.5) / 1e6 + (105 * 7.5) / 1e6;
+    expect(r.usage.estimatedCostUsd).toBeCloseTo(expectedUsd, 10);
+  });
+
   it("honours the LLM_MODEL override in the request URL", async () => {
     process.env.LLM_API_KEY = "test-key";
     process.env.LLM_MODEL = "gemini-3.6-flash";

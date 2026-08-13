@@ -152,6 +152,12 @@ type ClaimNode = {
   text: string;
   /** Fact-type requirements this node must satisfy from its cited facts. */
   required?: RequiredType[];
+  /**
+   * Strings that must appear (grounded) in the cited facts' value/excerpt,
+   * regardless of fact type. E.g. a doctor's specialty/qualification, which is
+   * often carried inside the DOCTOR fact rather than a separate typed fact.
+   */
+  groundedText?: string[];
   /** Apply free-text sensitive-term guards (emergency/accreditation). */
   freeText?: boolean;
 };
@@ -193,14 +199,16 @@ function validateNode(
     });
   }
 
-  // 2. Number grounding against value + excerpt of cited facts.
-  const numberHaystack = norm(
+  // Cited facts' value + excerpt, normalized — the grounding haystack.
+  const haystack = norm(
     facts
       .flatMap((f) => [stringifyValue(f.value), f.source_excerpt ?? ""])
       .join(" "),
   );
+
+  // 2. Number grounding.
   const ungrounded = digitRuns(node.text).filter(
-    (run) => !numberHaystack.includes(run),
+    (run) => !haystack.includes(run),
   );
   if (ungrounded.length > 0) {
     issues.push({
@@ -208,6 +216,18 @@ function validateNode(
       message: `Claim contains numbers not present in any supporting fact: ${ungrounded.join(", ")}`,
       factIds: ids,
     });
+  }
+
+  // 2b. Grounded-text requirements (must appear verbatim-ish in a cited fact).
+  for (const needle of node.groundedText ?? []) {
+    const n = norm(needle);
+    if (n.length > 0 && !haystack.includes(n)) {
+      issues.push({
+        path,
+        message: `"${needle}" is not grounded in any supporting fact.`,
+        factIds: ids,
+      });
+    }
   }
 
   // 3. Fact-type requirements.
@@ -304,18 +324,19 @@ export function validateClaims(
   );
 
   content.doctors?.forEach((d, i) => {
-    const required: RequiredType[] = [{ type: "DOCTOR", matchText: d.name }];
-    if (d.qualification) {
-      required.push({ type: "QUALIFICATION", matchText: d.qualification });
-    }
-    if (d.specialty) {
-      required.push({ type: "SPECIALTY", matchText: d.specialty });
-    }
+    // The name must come from a DOCTOR fact; the qualification/specialty must be
+    // grounded in the cited facts (they are commonly carried inside the DOCTOR
+    // fact itself, e.g. {name, specialty}). This still blocks an invented
+    // qualification (e.g. "MD Cardiology") that appears in no cited fact.
+    const groundedText = [d.qualification, d.specialty].filter(
+      (v): v is string => Boolean(v),
+    );
     check(
       {
         supporting_fact_ids: d.supporting_fact_ids,
         text: `${d.name} ${d.qualification ?? ""} ${d.specialty ?? ""}`,
-        required,
+        required: [{ type: "DOCTOR", matchText: d.name }],
+        groundedText,
       },
       `doctors[${i}]`,
     );
