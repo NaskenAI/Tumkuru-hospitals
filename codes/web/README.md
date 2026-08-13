@@ -82,6 +82,13 @@ If these are unset, the admin console and APIs stay locked. The public
 Fill the Supabase keys before doing a real database import. Dry-run CSV parsing
 works without Supabase.
 
+**LLM model & cost.** The provider is Google Gemini (REST v1beta). The default
+model is `gemini-3.6-flash` (`LLM_MODEL`), a stable Flash model supporting
+structured JSON output. Official paid-tier pricing ($1.50 input / $7.50 output
+per 1M tokens) lives in `src/lib/ai/pricing.ts`; INR estimates use an
+approximate `USD_TO_INR` rate. Changing `LLM_MODEL` should be paired with a
+pricing row for that model.
+
 ## Human approval gates
 
 Content cannot deploy until a human approves both languages:

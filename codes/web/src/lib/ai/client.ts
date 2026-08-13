@@ -8,6 +8,8 @@
 
 import { z } from "zod";
 
+import { DEFAULT_MODEL, estimateCost } from "@/lib/ai/pricing";
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -19,13 +21,9 @@ export type LlmConfig = {
   temperature?: number;
 };
 
-const defaultModel = "gemini-2.0-flash";
+const defaultModel = DEFAULT_MODEL;
 const defaultMaxTokens = 4096;
 const defaultTemperature = 0.1;
-
-// Cost per 1M tokens (INR, approximate for Gemini 2.0 Flash)
-const inputCostPerMillionTokens = 0.6;
-const outputCostPerMillionTokens = 2.4;
 
 function getConfig(overrides?: Partial<LlmConfig>): LlmConfig {
   const apiKey = overrides?.apiKey ?? process.env.LLM_API_KEY ?? "";
@@ -51,7 +49,9 @@ export type LlmUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  estimatedCostUsd: number;
   estimatedCostInr: number;
+  pricingVersion: string;
 };
 
 export type LlmResult<T> = {
@@ -82,13 +82,6 @@ function buildGeminiUrl(model: string, apiKey: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
-function estimateCost(promptTokens: number, completionTokens: number): number {
-  return (
-    (promptTokens / 1_000_000) * inputCostPerMillionTokens +
-    (completionTokens / 1_000_000) * outputCostPerMillionTokens
-  );
-}
-
 function extractTextFromResponse(response: GeminiResponse): string {
   const text = response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   return text.trim();
@@ -99,12 +92,15 @@ function buildUsage(model: string, response: GeminiResponse): LlmUsage {
   const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
   const totalTokens = response.usageMetadata?.totalTokenCount ?? 0;
 
+  const cost = estimateCost(model, promptTokens, completionTokens);
   return {
     model,
     promptTokens,
     completionTokens,
     totalTokens,
-    estimatedCostInr: estimateCost(promptTokens, completionTokens),
+    estimatedCostUsd: cost.estimatedCostUsd,
+    estimatedCostInr: cost.estimatedCostInr,
+    pricingVersion: cost.pricingVersion,
   };
 }
 
