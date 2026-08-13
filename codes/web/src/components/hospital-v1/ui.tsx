@@ -5,7 +5,6 @@ import type { NormalizedHospital } from "@/lib/normalize/model";
 // --- Design tokens (clinical / editorial, Section 30) -----------------------
 // Deep institutional teal-blue primary; ink text; red reserved for emergency.
 export const BRAND = "#0e5a6b";
-export const BRAND_DK = "#0a4653";
 
 export function assetUrl(id: string): string {
   return `/api/assets/${id}`;
