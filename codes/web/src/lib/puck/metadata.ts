@@ -6,14 +6,29 @@
  */
 
 import type { GeneratedContent } from "@/lib/content/content-schema";
+import type { HospitalTheme } from "@/lib/puck/theme";
 
 export type HospitalLang = "en" | "kn";
+
+/**
+ * Approved, first-party image assets selected for display. URLs point at the
+ * same-origin asset proxy (/api/assets/[id]), never at third-party hosts.
+ * Attributive imagery (specific doctors/facilities) is excluded here until a
+ * human approves it, so a mismatched photo can never imply a false claim.
+ */
+export type HospitalAssets = {
+  logoUrl?: string;
+  heroUrl?: string;
+  photos: { url: string; alt: string | null }[];
+};
 
 export type HospitalMetadata = {
   /** Approved + claim-validated content for the ACTIVE language. */
   content: GeneratedContent;
   lang: HospitalLang;
   slug: string;
+  assets: HospitalAssets;
+  theme: HospitalTheme;
 };
 
 type PuckLike = { metadata?: Record<string, unknown> } | undefined;
@@ -26,6 +41,8 @@ export function hospitalFromPuck(puck: PuckLike): HospitalMetadata | null {
     content: m.content,
     lang: (m.lang as HospitalLang) ?? "en",
     slug: (m.slug as string) ?? "",
+    assets: m.assets ?? { photos: [] },
+    theme: (m.theme as HospitalTheme) ?? "MODERN_CLINICAL",
   };
 }
 

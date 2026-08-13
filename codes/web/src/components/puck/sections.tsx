@@ -1,3 +1,10 @@
+/*
+ * Approved first-party images are served same-origin through /api/assets/[id]
+ * (SSRF-safe, cached). We use plain <img> deliberately: next/image would add a
+ * second optimizer hop over our proxy and require per-hospital remotePatterns,
+ * which conflicts with the "no hospital-specific config" rule.
+ */
+/* eslint-disable @next/next/no-img-element */
 import {
   Activity,
   Building2,
@@ -10,7 +17,7 @@ import {
   User,
 } from "lucide-react";
 
-import { availableActions } from "@/lib/puck/actions";
+import { availableActions, primaryActions } from "@/lib/puck/actions";
 import { isHospitalAccreditation } from "@/lib/puck/accreditation";
 import { hospitalFromPuck, initials } from "@/lib/puck/metadata";
 import { ActionButtons, Container, SectionHeading } from "@/components/puck/ui";
@@ -27,7 +34,7 @@ type SectionProps = {
 export function HospitalNavbar({ puck }: SectionProps) {
   const h = hospitalFromPuck(puck);
   if (!h) return null;
-  const { content, slug } = h;
+  const { content, slug, assets } = h;
   const actions = availableActions(content);
   const call = actions.find((a) => a.kind === "call");
 
@@ -40,17 +47,28 @@ export function HospitalNavbar({ puck }: SectionProps) {
   return (
     <nav className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
       <Container className="flex h-16 items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-teal-700 text-white">
-            <ShieldPlus size={18} aria-hidden="true" />
-          </span>
-          <span className="text-base font-bold tracking-tight text-slate-900">
-            {content.hospital_name}
-          </span>
-        </div>
+        {/* Real first-party logo when approved; otherwise a neutral wordmark. */}
+        {assets.logoUrl ? (
+          <img
+            src={assets.logoUrl}
+            alt={content.hospital_name}
+            className="h-9 w-auto sm:h-10"
+            loading="eager"
+            decoding="async"
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--brand)] text-white">
+              <ShieldPlus size={18} aria-hidden="true" />
+            </span>
+            <span className="text-base font-bold tracking-tight text-slate-900">
+              {content.hospital_name}
+            </span>
+          </div>
+        )}
         <div className="hidden items-center gap-6 md:flex">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="text-sm font-medium text-slate-600 hover:text-teal-700">
+            <a key={l.href} href={l.href} className="text-sm font-medium text-slate-600 hover:text-[var(--brand)]">
               {l.label}
             </a>
           ))}
@@ -60,7 +78,7 @@ export function HospitalNavbar({ puck }: SectionProps) {
             href={call.href}
             data-analytics-event="call_clicked"
             data-preview-slug={slug}
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-strong)]"
           >
             <Phone size={15} aria-hidden="true" />
             <span className="hidden sm:inline">{content.contact.phone}</span>
@@ -74,13 +92,16 @@ export function HospitalNavbar({ puck }: SectionProps) {
 
 // ---------------------------------------------------------------------------
 // Hero — variants: split | image-overlay | minimal
+// A real first-party photo is used when approved; otherwise a designed brand
+// panel (never a fabricated or stock photograph). CTAs are limited to the top
+// grounded actions so the primary conversion path is unmistakable.
 // ---------------------------------------------------------------------------
 
 export function HospitalHero({ puck, variant = "split" }: SectionProps) {
   const h = hospitalFromPuck(puck);
   if (!h) return null;
-  const { content, slug } = h;
-  const actions = availableActions(content);
+  const { content, slug, assets } = h;
+  const heroCtas = primaryActions(availableActions(content));
 
   const heading = (
     <>
@@ -89,14 +110,13 @@ export function HospitalHero({ puck, variant = "split" }: SectionProps) {
       </h1>
       <p className="mt-4 max-w-xl text-lg text-slate-600">{content.tagline.text}</p>
       <div className="mt-7">
-        <ActionButtons actions={actions} slug={slug} size="lg" />
+        <ActionButtons actions={heroCtas} slug={slug} size="lg" />
       </div>
     </>
   );
 
-  // A designed brand panel — NOT a photograph. No fabricated imagery.
   const brandPanel = (
-    <div className="relative flex min-h-64 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-teal-600 to-teal-900 p-8">
+    <div className="relative flex min-h-64 items-center justify-center overflow-hidden rounded-3xl p-8" style={{ background: "linear-gradient(135deg, var(--hero-from), var(--hero-to))" }}>
       <div className="absolute inset-0 opacity-20 [background:radial-gradient(circle_at_20%_20%,white_0,transparent_40%)]" />
       <ShieldPlus className="text-white/90" size={96} aria-hidden="true" strokeWidth={1.2} />
     </div>
@@ -112,7 +132,7 @@ export function HospitalHero({ puck, variant = "split" }: SectionProps) {
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-lg text-slate-600">{content.tagline.text}</p>
             <div className="mt-7 flex justify-center">
-              <ActionButtons actions={actions} slug={slug} size="lg" />
+              <ActionButtons actions={heroCtas} slug={slug} size="lg" />
             </div>
           </div>
         </Container>
@@ -122,16 +142,33 @@ export function HospitalHero({ puck, variant = "split" }: SectionProps) {
 
   if (variant === "image-overlay") {
     return (
-      <header className="relative overflow-hidden bg-gradient-to-br from-teal-700 to-teal-950 py-20 sm:py-28">
-        <div className="absolute inset-0 opacity-15 [background:radial-gradient(circle_at_80%_10%,white_0,transparent_45%)]" />
+      <header
+        className="relative overflow-hidden py-20 sm:py-28"
+        style={{ background: "linear-gradient(135deg, var(--hero-from), var(--hero-to))" }}
+      >
+        {assets.heroUrl ? (
+          <>
+            <img
+              src={assets.heroUrl}
+              alt=""
+              aria-hidden="true"
+              loading="eager"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/60 to-slate-950/25" />
+          </>
+        ) : (
+          <div className="absolute inset-0 opacity-15 [background:radial-gradient(circle_at_80%_10%,white_0,transparent_45%)]" />
+        )}
         <Container className="relative">
           <div className="max-w-2xl text-white">
-            <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
+            <h1 className="text-4xl font-extrabold leading-tight tracking-tight drop-shadow-sm sm:text-6xl">
               {content.hospital_name}
             </h1>
-            <p className="mt-4 max-w-xl text-lg text-teal-50/90">{content.tagline.text}</p>
+            <p className="mt-4 max-w-xl text-lg text-white/85">{content.tagline.text}</p>
             <div className="mt-8">
-              <ActionButtons actions={actions} slug={slug} size="lg" />
+              <ActionButtons actions={heroCtas} slug={slug} size="lg" tone="on-dark" />
             </div>
           </div>
         </Container>
@@ -139,19 +176,32 @@ export function HospitalHero({ puck, variant = "split" }: SectionProps) {
     );
   }
 
-  // split (default)
+  // split (default) — real photo beside the heading when available.
   return (
     <header className="bg-white py-14 sm:py-20">
       <Container className="grid items-center gap-10 lg:grid-cols-2">
         <div>{heading}</div>
-        <div>{brandPanel}</div>
+        <div>
+          {assets.heroUrl ? (
+            <img
+              src={assets.heroUrl}
+              alt=""
+              aria-hidden="true"
+              loading="eager"
+              decoding="async"
+              className="h-64 w-full rounded-3xl object-cover shadow-sm sm:h-80"
+            />
+          ) : (
+            brandPanel
+          )}
+        </div>
       </Container>
     </header>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Emergency strip
+// Emergency strip (intentionally red across all themes)
 // ---------------------------------------------------------------------------
 
 export function EmergencyStrip({ puck }: SectionProps) {
@@ -183,14 +233,17 @@ export function EmergencyStrip({ puck }: SectionProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Quick actions
+// Quick actions — the single utility bar carrying the full grounded action set
 // ---------------------------------------------------------------------------
 
 export function QuickActions({ puck }: SectionProps) {
   const h = hospitalFromPuck(puck);
   if (!h) return null;
   const actions = availableActions(h.content);
-  if (actions.length === 0) return null;
+  // The hero already surfaces the top two actions. Only show the utility bar
+  // when it adds something beyond that (3+ grounded actions) — otherwise it is
+  // a duplicate of the hero CTAs. Prevents back-to-back identical buttons.
+  if (actions.length <= 2) return null;
   return (
     <section className="bg-slate-50 py-6">
       <Container>
@@ -229,7 +282,7 @@ export function SpecialtyGrid({ puck, variant = "cards" }: SectionProps) {
             variant === "compact" ? (
               <span
                 key={i}
-                className="rounded-full border border-teal-100 bg-teal-50/70 px-4 py-2 text-sm font-medium text-teal-800"
+                className="rounded-full border border-[var(--brand-100)] bg-[var(--brand-050)] px-4 py-2 text-sm font-medium text-[var(--brand-strong)]"
               >
                 {s.name}
               </span>
@@ -238,7 +291,7 @@ export function SpecialtyGrid({ puck, variant = "cards" }: SectionProps) {
                 key={i}
                 className="flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm"
               >
-                <span className="flex size-11 items-center justify-center rounded-full bg-teal-50 text-teal-700">
+                <span className="flex size-11 items-center justify-center rounded-full bg-[var(--brand-050)] text-[var(--brand)]">
                   <Stethoscope size={20} aria-hidden="true" />
                 </span>
                 <span className="text-sm font-semibold text-slate-800">{s.name}</span>
@@ -248,7 +301,7 @@ export function SpecialtyGrid({ puck, variant = "cards" }: SectionProps) {
                 key={i}
                 className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
               >
-                <span className="flex size-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                <span className="flex size-10 items-center justify-center rounded-lg bg-[var(--brand-050)] text-[var(--brand)]">
                   <Stethoscope size={18} aria-hidden="true" />
                 </span>
                 <h3 className="mt-3 font-semibold text-slate-900">{s.name}</h3>
@@ -265,7 +318,43 @@ export function SpecialtyGrid({ puck, variant = "cards" }: SectionProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Gallery — REAL first-party photos only (approved, non-attributive)
+// ---------------------------------------------------------------------------
+
+export function HospitalGallery({ puck }: SectionProps) {
+  const h = hospitalFromPuck(puck);
+  if (!h) return null;
+  const photos = h.assets.photos ?? [];
+  if (photos.length === 0) return null;
+  return (
+    <section className="bg-slate-50 py-14">
+      <Container>
+        <SectionHeading eyebrow="Gallery" title="Our hospital" />
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {photos.map((p, i) => (
+            <div
+              key={i}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            >
+              <img
+                src={p.url}
+                alt={p.alt ?? ""}
+                loading="lazy"
+                decoding="async"
+                className="aspect-[4/3] w-full object-cover transition duration-300 hover:scale-105"
+              />
+            </div>
+          ))}
+        </div>
+      </Container>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Doctor card + grid — variants: cards | compact-list | featured-first
+// Doctor photos are NEVER auto-shown (a mismatch would imply a false claim);
+// initials are used until a human approves a specific doctor image.
 // ---------------------------------------------------------------------------
 
 export function DoctorCard({
@@ -284,7 +373,7 @@ export function DoctorCard({
       }`}
     >
       <div
-        className={`flex items-center justify-center rounded-full bg-teal-50 font-bold text-teal-700 ${
+        className={`flex items-center justify-center rounded-full bg-[var(--brand-050)] font-bold text-[var(--brand)] ${
           featured ? "size-16 text-xl" : "size-12"
         }`}
       >
@@ -292,7 +381,7 @@ export function DoctorCard({
       </div>
       <div>
         <h3 className={`font-semibold text-slate-900 ${featured ? "text-lg" : ""}`}>{name}</h3>
-        {subtitle && <p className="text-sm text-teal-700">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-[var(--brand)]">{subtitle}</p>}
       </div>
     </div>
   );
@@ -307,14 +396,14 @@ export function DoctorGrid({ puck, variant = "cards" }: SectionProps) {
     d.specialty || d.qualification || undefined;
 
   return (
-    <section id="doctors" className="bg-slate-50 py-14">
+    <section id="doctors" className="bg-white py-14">
       <Container>
         <SectionHeading eyebrow="Our team" title="Doctors & specialists" />
         {variant === "compact-list" ? (
           <ul className="mt-8 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {doctors.map((d, i) => (
               <li key={i} className="flex items-center gap-4 p-4">
-                <span className="flex size-9 items-center justify-center rounded-full bg-teal-50 text-sm font-bold text-teal-700">
+                <span className="flex size-9 items-center justify-center rounded-full bg-[var(--brand-050)] text-sm font-bold text-[var(--brand)]">
                   {initials(d.name)}
                 </span>
                 <div>
@@ -378,12 +467,25 @@ export function AboutHospital({ puck, variant = "editorial" }: SectionProps) {
   }
 
   if (variant === "image-split") {
+    // Use a real photo when approved; otherwise a designed brand panel.
+    const media = h.assets.heroUrl ? (
+      <img
+        src={h.assets.heroUrl}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        className="h-full min-h-56 w-full rounded-3xl object-cover shadow-sm"
+      />
+    ) : (
+      <div className="flex min-h-56 items-center justify-center rounded-3xl bg-gradient-to-br from-slate-100 to-[var(--brand-050)] p-8">
+        <Building2 className="text-[var(--brand)]/70" size={80} strokeWidth={1.2} aria-hidden="true" />
+      </div>
+    );
     return (
       <section id="about" className="bg-white py-14">
         <Container className="grid items-center gap-10 lg:grid-cols-2">
-          <div className="flex min-h-56 items-center justify-center rounded-3xl bg-gradient-to-br from-slate-100 to-teal-50 p-8">
-            <Building2 className="text-teal-600/70" size={80} strokeWidth={1.2} aria-hidden="true" />
-          </div>
+          {media}
           <div>
             <SectionHeading eyebrow="About" title={h.content.hospital_name} />
             <div className="mt-5">{body}</div>
@@ -420,13 +522,13 @@ export function StatsSection({ puck }: SectionProps) {
   if (stats.length === 0) return null;
 
   return (
-    <section className="bg-teal-900 py-10 text-white">
+    <section className="bg-[var(--brand-strong)] py-10 text-white">
       <Container>
         <div className="grid grid-cols-2 gap-6 text-center sm:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label}>
               <div className="text-3xl font-extrabold">{s.n}</div>
-              <div className="mt-1 text-sm text-teal-100/80">{s.label}</div>
+              <div className="mt-1 text-sm text-white/70">{s.label}</div>
             </div>
           ))}
         </div>
@@ -504,17 +606,17 @@ export function AppointmentCTA({ puck }: SectionProps) {
   const appt = actions.find((a) => a.kind === "appointment");
   if (!appt) return null;
   return (
-    <section className="bg-teal-700 py-12 text-white">
+    <section className="bg-[var(--brand)] py-12 text-white">
       <Container className="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
         <div>
           <h2 className="text-2xl font-bold">Book an appointment</h2>
-          <p className="mt-1 text-teal-50/90">Schedule a consultation with {h.content.hospital_name}.</p>
+          <p className="mt-1 text-white/85">Schedule a consultation with {h.content.hospital_name}.</p>
         </div>
         <a
           href={appt.href}
           data-analytics-event="contact_clicked"
           data-preview-slug={h.slug}
-          className="inline-flex h-12 items-center rounded-full bg-white px-7 text-base font-semibold text-teal-800"
+          className="inline-flex h-12 items-center rounded-full bg-white px-7 text-base font-semibold text-[var(--brand-strong)]"
         >
           {appt.label}
         </a>
@@ -549,7 +651,7 @@ export function ContactSection({ puck, variant = "cards" }: SectionProps) {
               const Icon = it.icon;
               const inner = (
                 <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                  <span className="flex size-9 items-center justify-center rounded-lg bg-[var(--brand-050)] text-[var(--brand)]">
                     <Icon size={16} aria-hidden="true" />
                   </span>
                   <span>
@@ -616,16 +718,20 @@ export function MapOrDirectionsSection({ puck }: SectionProps) {
 export function HospitalFooter({ puck }: SectionProps) {
   const h = hospitalFromPuck(puck);
   if (!h) return null;
-  const { content } = h;
+  const { content, assets } = h;
   return (
     <footer className="border-t border-slate-200 bg-white py-10">
       <Container className="flex flex-col items-center gap-3 text-center">
-        <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-teal-700 text-white">
-            <ShieldPlus size={16} aria-hidden="true" />
-          </span>
-          <span className="font-bold text-slate-900">{content.hospital_name}</span>
-        </div>
+        {assets.logoUrl ? (
+          <img src={assets.logoUrl} alt={content.hospital_name} className="h-9 w-auto" loading="lazy" decoding="async" />
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-[var(--brand)] text-white">
+              <ShieldPlus size={16} aria-hidden="true" />
+            </span>
+            <span className="font-bold text-slate-900">{content.hospital_name}</span>
+          </div>
+        )}
         {content.contact.address && (
           <p className="max-w-md text-sm text-slate-500">{content.contact.address}</p>
         )}

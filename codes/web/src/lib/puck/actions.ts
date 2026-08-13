@@ -24,6 +24,26 @@ export type HospitalAction = {
   href: string;
 };
 
+// CTA hierarchy (Phase K): the hero shows only the top actions so the primary
+// conversion path is unmistakable; the full set stays available in the utility
+// bar and contextual sections. Order of importance: appointment > call >
+// directions > whatsapp.
+const ACTION_PRIORITY: Record<HospitalActionKind, number> = {
+  appointment: 0,
+  call: 1,
+  directions: 2,
+  whatsapp: 3,
+};
+
+export function primaryActions(
+  actions: HospitalAction[],
+  max = 2,
+): HospitalAction[] {
+  return [...actions]
+    .sort((a, b) => ACTION_PRIORITY[a.kind] - ACTION_PRIORITY[b.kind])
+    .slice(0, max);
+}
+
 export function directionsHref(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     address,

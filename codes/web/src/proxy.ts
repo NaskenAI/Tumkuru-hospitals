@@ -10,8 +10,10 @@ import {
 // - /admin/login: the login screen itself
 // - /api/auth/*: login/logout endpoints
 // - /api/analytics: public preview analytics ingest (no admin data)
+// - /api/assets/*: serves only APPROVED first-party hospital images (already
+//   public on the hospital's own site) to the public preview page; SSRF-safe.
 const PUBLIC_EXACT = new Set(["/admin/login", "/api/analytics"]);
-const PUBLIC_PREFIXES = ["/api/auth/", "/api/analytics/"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/api/analytics/", "/api/assets/"];
 
 /**
  * Whether a matched path is reachable without an admin session. Everything else

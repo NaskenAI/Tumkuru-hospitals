@@ -3,6 +3,8 @@ import type { Data } from "@measured/puck";
 
 import { PuckEditor } from "@/components/puck/puck-editor";
 import { defaultPuckPage, sanitizePuckData } from "@/lib/puck/default-page";
+import { approvedAssetsForLead } from "@/lib/assets/select";
+import { chooseTheme } from "@/lib/puck/theme";
 import type { GeneratedContent } from "@/lib/content/content-schema";
 import {
   createSupabaseServiceClient,
@@ -25,7 +27,7 @@ export default async function DesignPage({
   const supabase = createSupabaseServiceClient();
   const { data: preview } = await supabase
     .from("previews")
-    .select("id,slug,generated_content_id,puck_data")
+    .select("id,slug,lead_id,generated_content_id,puck_data")
     .eq("id", id)
     .single();
   if (!preview) notFound();
@@ -41,6 +43,7 @@ export default async function DesignPage({
   const initialData: Data = preview.puck_data
     ? sanitizePuckData(preview.puck_data as unknown as Data)
     : defaultPuckPage(content);
+  const assets = await approvedAssetsForLead(supabase, preview.lead_id);
 
   return (
     <PuckEditor
@@ -48,6 +51,8 @@ export default async function DesignPage({
       initialData={initialData}
       content={content}
       slug={preview.slug}
+      assets={assets}
+      theme={chooseTheme(content)}
     />
   );
 }

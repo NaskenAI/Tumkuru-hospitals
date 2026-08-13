@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { isAutomatedUserAgent } from "@/lib/analytics/automation";
 import {
   createSupabaseServiceClient,
   isSupabaseConfigured,
@@ -29,6 +30,12 @@ const analyticsRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured()) {
     // Analytics is best-effort; never surface config errors to public pages.
+    return NextResponse.json({ ok: true, recorded: false });
+  }
+
+  // Do not count automated / internal traffic (incl. the screenshot job) as
+  // prospect engagement.
+  if (isAutomatedUserAgent(request.headers.get("user-agent"))) {
     return NextResponse.json({ ok: true, recorded: false });
   }
 

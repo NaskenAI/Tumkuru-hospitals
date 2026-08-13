@@ -7,6 +7,8 @@ import { useState } from "react";
 
 import { hospitalPuckConfig } from "@/lib/puck/config";
 import type { GeneratedContent } from "@/lib/content/content-schema";
+import type { HospitalAssets } from "@/lib/puck/metadata";
+import type { HospitalTheme } from "@/lib/puck/theme";
 
 /**
  * Internal Nasken layout editor. Edits PRESENTATION ONLY (component order +
@@ -18,11 +20,15 @@ export function PuckEditor({
   initialData,
   content,
   slug,
+  assets,
+  theme,
 }: {
   previewId: string;
   initialData: Data;
   content: GeneratedContent;
   slug: string;
+  assets: HospitalAssets;
+  theme: HospitalTheme;
 }) {
   const [status, setStatus] = useState<string | null>(null);
 
@@ -51,7 +57,7 @@ export function PuckEditor({
       <Puck
         config={hospitalPuckConfig}
         data={initialData}
-        metadata={{ content, lang: "en", slug }}
+        metadata={{ content, lang: "en", slug, assets, theme }}
         onPublish={save}
         headerTitle="Layout designer (presentation only)"
       />

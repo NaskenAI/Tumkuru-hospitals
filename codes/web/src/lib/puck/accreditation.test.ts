@@ -11,6 +11,13 @@ describe("accreditation taxonomy safety", () => {
     ).toBe(false);
     expect(isHospitalAccreditation("Fellow of the Royal College of Surgeons")).toBe(false);
     expect(isHospitalAccreditation("Member of the Karnataka Medical Council")).toBe(false);
+    // Exact string that appeared, mislabeled as an ACCREDITATION, in Ganga's
+    // approved content — must never render as a hospital accreditation.
+    expect(
+      isHospitalAccreditation(
+        "Dr. Vijay Tubaki is an active member of Asia Pacific Spine Society, Association Spine Surgeons",
+      ),
+    ).toBe(false);
   });
 
   it("accepts a genuine hospital accreditation", () => {

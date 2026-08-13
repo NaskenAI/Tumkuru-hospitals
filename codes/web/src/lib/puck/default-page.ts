@@ -35,13 +35,17 @@ export function defaultPuckPage(content: GeneratedContent): Data {
 
   const items: Array<Item | null> = [
     { type: "HospitalNavbar", props: {} },
-    { type: "HospitalHero", props: { variant: "split" } },
+    // Image-overlay hero: uses an approved first-party photo when one exists,
+    // otherwise a designed brand panel (the component self-adapts).
+    { type: "HospitalHero", props: { variant: "image-overlay" } },
     has.emergency ? { type: "EmergencyStrip", props: {} } : null,
     { type: "QuickActions", props: {} },
     anyStat ? { type: "StatsSection", props: {} } : null,
     has.specialties ? { type: "SpecialtyGrid", props: { variant: "cards" } } : null,
+    // Real first-party photo band; self-hides when no approved photos exist.
+    { type: "HospitalGallery", props: {} },
+    has.about ? { type: "AboutHospital", props: { variant: "image-split" } } : null,
     has.doctors ? { type: "DoctorGrid", props: { variant: "cards" } } : null,
-    has.about ? { type: "AboutHospital", props: { variant: "editorial" } } : null,
     has.accreditations ? { type: "AccreditationSection", props: {} } : null,
     has.insurance ? { type: "InsuranceSection", props: {} } : null,
     has.appointment ? { type: "AppointmentCTA", props: {} } : null,
