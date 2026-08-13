@@ -30,4 +30,15 @@ describe("accreditation status (APPLIED != HELD)", () => {
     const text = "Dr. Vijay is an active member of the Spine Society (accreditation).";
     expect(parseAccreditations([text], page, text)).toHaveLength(0);
   });
+
+  it("captures APPLIED from a long flattened block (window around keyword)", () => {
+    const long =
+      "Apply for Accreditation and Recognition In the Early 2024, the hospital has applied to obtain accreditation from relevant healthcare authorities and to earn recognition for its high-quality care, patient safety measures and clinical outcomes across all departments and services offered.";
+    const [a] = parseAccreditations([long], page, long);
+    expect(a.status).toBe("APPLIED");
+  });
+
+  it("does not emit a bare 'Accreditation & Recognition' heading as HELD", () => {
+    expect(parseAccreditations(["Accreditation and Recognition"], page, "Accreditation and Recognition")).toHaveLength(0);
+  });
 });

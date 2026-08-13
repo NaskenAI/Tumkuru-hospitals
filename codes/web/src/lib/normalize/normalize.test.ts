@@ -146,6 +146,33 @@ describe("synthetic — specialty (ortho-heavy) hospital", () => {
   });
 });
 
+describe("hospital establishment vs predecessor clinic vs copyright", () => {
+  const aboutPage = (body: string): SourcePage => ({
+    id: "about", url: "https://h.example/about/", tier: 2, pageType: "ABOUT",
+    html: `<html><head><title>H Hospital</title></head><body><div class="entry-content"><p>${body}</p></div></body></html>`,
+  });
+
+  it("copyright year never becomes an establishment date", () => {
+    const m = normalizeHospital({ pages: [aboutPage("© 2017-26 H Hospital. All rights reserved.")] });
+    expect(m.established.value).toBeNull();
+  });
+
+  it("predecessor clinic founding does not become hospital establishment", () => {
+    const m = normalizeHospital({ pages: [aboutPage("The clinic was established in 2017 as a small facility.")] });
+    expect(m.established.value).toBeNull();
+    expect(m.established.entity).toBe("predecessor clinic");
+  });
+
+  it("uses the hospital establishment date when stated", () => {
+    const m = normalizeHospital({
+      pages: [aboutPage("The clinic was established in 2017. The hospital was established in February 2024.")],
+    });
+    expect(m.established.entity).toBe("hospital");
+    expect(m.established.value).toBe(2024);
+    expect(m.established.precision).toBe("month");
+  });
+});
+
 describe("normalization failure contract", () => {
   it("records an unparsable page in coverage.unparsed and stays PARTIAL", () => {
     const model = normalizeHospital({

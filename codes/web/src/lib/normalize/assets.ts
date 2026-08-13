@@ -15,7 +15,13 @@
  * REVIEW_REQUIRED↔PENDING, HUMAN_APPROVED↔APPROVED(by a human), REJECTED↔REJECTED.
  */
 
-import type { ApprovalState, NormalizedAssetClassification } from "@/lib/normalize/model";
+import { makeEvidence } from "@/lib/normalize/evidence";
+import type {
+  ApprovalState,
+  NormalizedAsset,
+  NormalizedAssetClassification,
+} from "@/lib/normalize/model";
+import { assetBaseKey, filenameWords, titleCaseLabel } from "@/lib/normalize/text";
 
 // Classes that assert something about a named person or specific capability.
 const ATTRIBUTIVE = new Set<NormalizedAssetClassification>([
@@ -60,4 +66,95 @@ export function looksLikeRender(url: string, altOrCaption = ""): boolean {
   return /(render|3d|artist|impression|concept|proposed|architectural|elevation|walkthrough)/i.test(
     `${url} ${altOrCaption}`,
   );
+}
+
+// --- Live approval reconciliation (Section 6) -------------------------------
+//
+// Documented mapping from the persisted 3-state column to the normalized model.
+// SAFETY: a persisted PENDING/attributive asset can NEVER become publicly
+// approved through normalization.
+//   REJECTED                         → REJECTED
+//   APPROVED + non-attributive class → AUTO_APPROVED
+//   APPROVED + attributive class     → REVIEW_REQUIRED (association not confirmed)
+//   PENDING / anything else          → REVIEW_REQUIRED
+export function reconcileApprovalState(
+  dbStatus: string,
+  classification: NormalizedAssetClassification,
+): ApprovalState {
+  if (dbStatus === "REJECTED") return "REJECTED";
+  if (dbStatus === "APPROVED") {
+    return isAttributive(classification) ? "REVIEW_REQUIRED" : "AUTO_APPROVED";
+  }
+  return "REVIEW_REQUIRED";
+}
+
+/** Only AUTO_APPROVED / HUMAN_APPROVED assets may be shown publicly. */
+export function isPubliclyEligible(state: ApprovalState): boolean {
+  return state === "AUTO_APPROVED" || state === "HUMAN_APPROVED";
+}
+
+/** A persisted hospital_assets row (the existing inventory — not a new store). */
+export type PersistedAssetRow = {
+  id: string;
+  source_id: string | null;
+  source_page_url: string | null;
+  original_asset_url: string;
+  mime_type: string | null;
+  width: number | null;
+  height: number | null;
+  alt_text: string | null;
+  classification: string;
+  approval_status: string;
+};
+
+/**
+ * Map a persisted asset row into the normalized Asset model. Unknown fields
+ * stay null (never fabricated); no vision scores are invented.
+ */
+export function normalizeAssetRow(
+  row: PersistedAssetRow,
+  opts: { ogKeys?: Set<string> } = {},
+): NormalizedAsset {
+  const url = row.original_asset_url;
+  const alt = (row.alt_text ?? "").trim();
+  const render = looksLikeRender(url, alt);
+  let classification = mapClassification(row.classification);
+  if (render) classification = "RENDER";
+
+  const is_photograph =
+    !render && classification !== "LOGO" && classification !== "INSURER_MARK";
+  const caption = alt || filenameWords(url).map(titleCaseLabel).join(" ") || null;
+  const caption_source: NormalizedAsset["caption_source"] = alt ? "alt" : caption ? "filename" : "none";
+  const aspect = row.width && row.height ? row.width / row.height : null;
+
+  return {
+    asset_id: row.id,
+    source_page_id: row.source_id ?? "",
+    source_page_url: row.source_page_url ?? "",
+    original_url: url,
+    width: row.width,
+    height: row.height,
+    aspect,
+    bytes: null,
+    mime: row.mime_type,
+    og_declared: opts.ogKeys?.has(assetBaseKey(url)) ?? false,
+    page_banner: false,
+    caption,
+    caption_source,
+    classification,
+    is_photograph,
+    crowding: "unknown", // no vision signal → never fabricated
+    technical_quality: null,
+    composition_quality: null,
+    hero_suitability: null,
+    card_suitability: null,
+    subject_ref: undefined, // no safe person/facility association at this layer
+    approval_state: reconcileApprovalState(row.approval_status, classification),
+    evidence: [
+      makeEvidence(
+        { id: row.source_id ?? "", url: row.source_page_url ?? "", tier: 2 },
+        { excerpt: alt || undefined },
+      ),
+    ],
+  };
 }
