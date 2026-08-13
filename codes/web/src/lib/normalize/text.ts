@@ -56,6 +56,13 @@ export function containsSuperlative(text: string): boolean {
 
 const SMALL_WORDS = new Set(["and", "of", "the", "for", "in", "&", "to"]);
 
+// Common medical/facility acronyms kept uppercase in display labels.
+const ACRONYMS = new Set([
+  "icu", "ot", "ent", "opd", "ipd", "mri", "ct", "tpa", "nabh", "nabl", "iso",
+  "jci", "cssd", "stp", "ro", "hdu", "nicu", "picu", "ccu", "er", "ecg", "eeg",
+  "usg", "tmt", "ohc", "mgps",
+]);
+
 /** Title-case a SHOUTING or lower label while keeping small words + acronyms. */
 export function titleCaseLabel(label: string): string {
   const cleaned = collapseWs(label).toLowerCase();
@@ -63,8 +70,9 @@ export function titleCaseLabel(label: string): string {
     .split(" ")
     .map((w, i) => {
       if (w === "&") return "&";
+      const bare = w.replace(/[^a-z0-9]/g, "");
+      if (ACRONYMS.has(bare)) return w.toUpperCase();
       if (i > 0 && SMALL_WORDS.has(w)) return w;
-      // keep short all-caps acronyms if the original token was uppercase
       return w.charAt(0).toUpperCase() + w.slice(1);
     })
     .join(" ");
