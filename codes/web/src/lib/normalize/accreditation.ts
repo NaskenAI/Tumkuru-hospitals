@@ -1,31 +1,35 @@
 /**
- * Accreditation extraction with explicit status (Section 22).
- * "Applied for NABH" must NEVER normalize to "NABH accredited". A doctor's
- * professional-society membership is not a hospital accreditation and is
- * excluded here.
+ * Accreditation extraction with explicit status (Section 22 / Task-1B §12).
+ *
+ * Hard rules:
+ *  - "applied to obtain accreditation" → APPLIED, never HELD.
+ *  - HELD requires a possession signal ("accredited"/"certified"/"...by/from"),
+ *    NOT the bare noun "accreditation"/"recognition" (a heading/topic word).
+ *  - A doctor's professional-society membership is not a hospital accreditation.
+ *  - The accrediting body is never invented — unstated ⇒ "Accreditation".
  */
 
 import { makeEvidence } from "@/lib/normalize/evidence";
 import type { Accreditation, AccreditationStatus, SourcePage } from "@/lib/normalize/model";
 import { collapseWs } from "@/lib/normalize/text";
 
-const BODIES = ["NABH", "NABL", "JCI", "ISO", "NABL", "NQAS", "AHPI"];
+const BODIES = ["NABH", "NABL", "JCI", "ISO", "NQAS", "AHPI"];
 const MEMBERSHIP_RE = /\b(member|membership|fellow|fellowship|affiliat)|\bdr\.?\s/i;
+const TRIGGER = /\b(accredit|certif|nabh|nabl|jci|iso|nqas|ahpi)/i;
 
 function statusFor(text: string): AccreditationStatus {
   const t = text.toLowerCase();
-  if (/\b(applied|applying|in process|in the process|pursuing|process of|under process|working towards)\b/.test(t)) {
+  if (/\b(applied|applying|in (the )?process|process of|pursuing|working towards|under process|plans to obtain|to obtain)\b/.test(t)) {
     return "APPLIED";
   }
-  if (/\b(expired|lapsed|no longer)\b/.test(t)) return "EXPIRED";
-  if (/\b(accredit|certified|certification)/.test(t)) return "HELD";
+  if (/\b(expired|lapsed|no longer (accredit|certif))\b/.test(t)) return "EXPIRED";
+  // Possession — an adjective/participle or "accredited by/from", not the noun.
+  if (/\b(accredited|certified)\b/.test(t) || /(accredit\w*|certif\w*)\s+(by|from)\b/.test(t)) {
+    return "HELD";
+  }
   return "UNKNOWN";
 }
 
-/**
- * Scan a page's candidate lines (sentences or short labels) for accreditation
- * statements. Each candidate carries its own text so status is per-statement.
- */
 export function parseAccreditations(
   candidates: string[],
   page: SourcePage,
@@ -34,26 +38,29 @@ export function parseAccreditations(
   const out: Accreditation[] = [];
   const seen = new Set<string>();
   for (const raw of candidates) {
-    const text = collapseWs(raw);
-    if (!text || text.length > 200) continue;
-    // Require an accreditation/certification word or a named body — a bare
-    // "Recognitions" heading is NOT an accreditation claim.
-    if (!/\b(accredit|certif|\bnabh\b|\bnabl\b|\bjci\b|\biso\b|\bnqas\b|\bahpi\b)/i.test(text)) continue;
-    // Never treat a person's membership/affiliation as a hospital accreditation.
+    const full = collapseWs(raw);
+    const km = TRIGGER.exec(full);
+    if (!km) continue;
+    // Window around the keyword so long flattened blocks still yield a statement.
+    const text = full.length <= 200 ? full : collapseWs(full.slice(Math.max(0, km.index - 90), km.index + 120));
     if (MEMBERSHIP_RE.test(text)) continue;
 
     const body =
-      BODIES.find((b) => new RegExp(`\\b${b}\\b`, "i").test(text)) ??
-      (/\biso\b/i.test(text) ? "ISO" : "Accreditation");
+      BODIES.find((b) => new RegExp(`\\b${b}\\b`, "i").test(text)) ?? "Accreditation";
+    const hasBody = body !== "Accreditation";
     const status = statusFor(text);
+    // A bare "accreditation"/"recognition" topic word with no status and no
+    // named body is not an accreditation claim — drop it.
+    if (status === "UNKNOWN" && !hasBody) continue;
+
     const key = `${body}:${status}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
       body,
       status,
-      rawText: text,
-      evidence: [makeEvidence(page, { excerpt: text, pageText })],
+      rawText: text.slice(0, 200),
+      evidence: [makeEvidence(page, { excerpt: text.slice(0, 200), pageText })],
     });
   }
   return out;

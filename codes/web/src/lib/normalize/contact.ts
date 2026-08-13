@@ -36,10 +36,12 @@ export function parseContact(pages: ContactPageInput[]): {
     for (const m of pageText.matchAll(MOBILE_RE)) collectPhone(m[0]);
     for (const m of pageText.matchAll(LANDLINE_RE)) collectPhone(m[0]);
     for (const m of pageText.matchAll(EMAIL_RE)) {
-      const val = m[0].toLowerCase();
+      // Flattened text can concatenate an adjacent phone into the local part
+      // ("…944011info@…"). Strip a long leading digit-run before letters.
+      const val = m[0].toLowerCase().replace(/^\d{4,}(?=[a-z])/, "");
       const key = val;
       const e = emailMap.get(key) ?? { value: val, evidence: [] };
-      e.evidence.push(makeEvidence(page, { excerpt: m[0], pageText }));
+      e.evidence.push(makeEvidence(page, { excerpt: val, pageText }));
       emailMap.set(key, e);
     }
     function collectPhone(raw: string) {
@@ -61,16 +63,29 @@ export function parseContact(pages: ContactPageInput[]): {
 
   const contact: Contact = { phones, emails, conflicts };
 
-  // Location — best-effort address line (a line containing a 6-digit pincode).
+  // Location — best-effort: a window ending at a 6-digit pincode (robust to
+  // whitespace-flattened WP text where clean "lines" don't exist).
   const location: Location = {};
   for (const { page, pageText } of pages) {
-    const line = pageText.split(/[\n·|]/).map(collapseWs).find((l) => PINCODE_RE.test(l) && l.length < 160 && /[a-z]/i.test(l));
-    if (line) {
-      location.address = { value: line, evidence: [makeEvidence(page, { excerpt: line, pageText })] };
-      const pin = line.match(PINCODE_RE);
-      if (pin) location.postalCode = { value: pin[0], evidence: [makeEvidence(page, { excerpt: pin[0], pageText })] };
-      break;
-    }
+    const text = collapseWs(pageText);
+    const m = PINCODE_RE.exec(text);
+    if (!m) continue;
+    const end = m.index + m[0].length;
+    // grab up to ~110 chars before the pincode, then trim leading noise so the
+    // address starts at a capitalized token / house number.
+    let addr = collapseWs(text.slice(Math.max(0, m.index - 130), end));
+    // Drop leading header noise (social/phone/email) — keep from the last email
+    // or a recognizable address anchor onward.
+    addr = addr.replace(/^.*@\S+\s*/, "");
+    const anchor = addr.match(/(near|opp\.?|opposite|beside|behind|plot|door\s*no|#\s*\d|\bno\.?\s*\d|\d{1,4}(?:st|nd|rd|th)?\s+(?:main|cross|road|street|stage|block|phase|nagar))/i);
+    if (anchor && anchor.index && anchor.index > 0) addr = addr.slice(anchor.index);
+    addr = collapseWs(addr.replace(/^[^A-Za-z0-9#]*/, ""));
+    if (addr.length < 8 || addr.length > 160) continue;
+    location.address = { value: addr, evidence: [makeEvidence(page, { excerpt: addr, pageText })] };
+    location.postalCode = { value: m[0], evidence: [makeEvidence(page, { excerpt: m[0], pageText })] };
+    const cityM = addr.match(/([A-Z][a-z]+)\s*[-–]\s*\d{6}/);
+    if (cityM) location.city = { value: cityM[1], evidence: [makeEvidence(page, { excerpt: cityM[0], pageText })] };
+    break;
   }
 
   // Appointment — explicit channels only; never inferred from a phone number.
@@ -93,13 +108,16 @@ export function parseContact(pages: ContactPageInput[]): {
     }
   }
 
-  // Emergency — only from explicit evidence.
+  // Emergency — only from explicit evidence. Use a tight window around the
+  // keyword (flattened WP text has no sentence breaks around the nav).
   let emergency: Emergency = { available: "unknown", evidence: [] };
+  const EMERGENCY_RE = /(24\s*[x/×]\s*7|24\s*\/\s*7|round[- ]the[- ]clock)[^.]{0,30}(emergency|casualty|trauma)|(emergency|casualty)\s+(services?|care|department|ward)\b[^.]{0,20}(available|24|round)?/i;
   for (const { page, pageText } of pages) {
-    const m = pageText.match(/[^.]*\b(24\s*[x/×]\s*7|24\/7|round[- ]the[- ]clock)\b[^.]*\b(emergency|casualty|trauma)\b[^.]*/i)
-      || pageText.match(/[^.]*\bemergency (services?|care)\b (available|24)[^.]*/i);
+    const text = collapseWs(pageText);
+    const m = EMERGENCY_RE.exec(text);
     if (m) {
-      emergency = { available: true, text: collapseWs(m[0]).slice(0, 120), evidence: [makeEvidence(page, { excerpt: collapseWs(m[0]).slice(0, 120), pageText })] };
+      const win = collapseWs(text.slice(Math.max(0, m.index), m.index + Math.min(90, m[0].length + 40)));
+      emergency = { available: true, text: win, evidence: [makeEvidence(page, { excerpt: win, pageText })] };
       break;
     }
   }

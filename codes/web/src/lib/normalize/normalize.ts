@@ -25,6 +25,7 @@ import {
   parseNormalizedHospital,
   type Coverage,
   type HospitalStatus,
+  type NormalizedAsset,
   type NormalizedHospital,
   type Specialty,
   type SourcePage,
@@ -37,6 +38,8 @@ export type NormalizeInput = {
   pages: SourcePage[];
   /** Total pages discovered (may exceed crawled). Defaults to pages.length. */
   pagesDiscovered?: number;
+  /** Pre-normalized first-party assets (from the live asset adapter). */
+  assets?: NormalizedAsset[];
 };
 
 function visibleText($: CheerioAPI): string {
@@ -75,6 +78,49 @@ function extractHospitalName($: CheerioAPI): string | null {
 
 function isDetailPage(url: string): boolean {
   return /\/our-doctors\/[^/]+\/?$|\/(about-founder|doctor|profile)\//i.test(url);
+}
+
+/**
+ * Establishment of the HOSPITAL — never the predecessor clinic, never a
+ * copyright/footer year. If only clinic-founding evidence exists, value stays
+ * null with entity="predecessor clinic" so the distinction is explicit.
+ */
+function deriveEstablishment(
+  cands: { text: string; page: SourcePage; pageText: string }[],
+): NormalizedHospital["established"] {
+  const yearOf = (t: string) => {
+    const m = t.match(/\b(19|20)\d{2}\b/);
+    return m ? Number(m[0]) : null;
+  };
+  const usable = cands.filter(
+    (c) => !/©|\(c\)|copyright|all rights reserved/i.test(c.text) && yearOf(c.text),
+  );
+  const hosp = usable.find(
+    (c) => /\bhospital\b/i.test(c.text) && /(establish|inaugurat|found)/i.test(c.text),
+  );
+  if (hosp) {
+    const year = yearOf(hosp.text)!;
+    const month = hosp.text.toLowerCase().match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/);
+    const precision: "year" | "month" = month ? "month" : "year";
+    return {
+      value: year,
+      precision,
+      entity: "hospital",
+      evidence: [makeEvidence(hosp.page, { excerpt: hosp.text.slice(0, 160), pageText: hosp.pageText })],
+    };
+  }
+  const clinic = usable.find(
+    (c) => /\bclinic\b/i.test(c.text) && /(establish|found)/i.test(c.text),
+  );
+  if (clinic) {
+    return {
+      value: null,
+      precision: "unknown",
+      entity: "predecessor clinic",
+      evidence: [makeEvidence(clinic.page, { excerpt: clinic.text.slice(0, 160), pageText: clinic.pageText })],
+    };
+  }
+  return { value: null, precision: "unknown", entity: null, evidence: [] };
 }
 
 export function normalizeHospital(input: NormalizeInput): NormalizedHospital {
@@ -206,6 +252,14 @@ export function normalizeHospital(input: NormalizeInput): NormalizedHospital {
     loaded.map((l) => ({ page: l.page, pageText: l.text, html: l.page.html })),
   );
 
+  // --- Hospital establishment (distinct from predecessor clinic) -----------
+  const estCands: { text: string; page: SourcePage; pageText: string }[] = [];
+  for (const { page, text } of loaded) {
+    if (!(page.pageType === "ABOUT" || page.pageType === "HOME" || /about|founder|milestone|history|highlights|\/$/i.test(page.url))) continue;
+    for (const s of sentences(text)) estCands.push({ text: s, page, pageText: text });
+  }
+  const established = deriveEstablishment(estCands);
+
   // --- Hospital name -------------------------------------------------------
   let hospitalName: NormalizedHospital["hospitalName"];
   for (const { page, $, text } of loaded) {
@@ -233,6 +287,7 @@ export function normalizeHospital(input: NormalizeInput): NormalizedHospital {
   const model: NormalizedHospital = {
     status,
     hospitalName,
+    established,
     contact,
     location,
     emergency,
@@ -241,7 +296,7 @@ export function normalizeHospital(input: NormalizeInput): NormalizedHospital {
     people: { doctors: people.doctors, administrators: people.administrators, others: people.others },
     specialties,
     facilities,
-    assets: [],
+    assets: input.assets ?? [],
     insurers,
     narrative: { about, founder, milestones: dedupeMilestones(milestones) },
     positioningClaims: dedupePositioning(positioningClaims),

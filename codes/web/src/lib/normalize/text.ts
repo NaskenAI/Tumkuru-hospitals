@@ -100,9 +100,18 @@ export function nameTokens(displayName: string): string[] {
 
 /** Words from a filename slug (last path segment, no extension/size suffix). */
 export function filenameWords(url: string): string[] {
-  const base = (url.split("/").pop() ?? "")
+  return assetBaseKey(url).split(/[-_]+/).filter(Boolean);
+}
+
+/**
+ * Identity key for an image ignoring WordPress resize variants, so the og:image
+ * (full size) matches a stored "-1024x533"/"-scaled" derivative of the same file.
+ */
+export function assetBaseKey(url: string): string {
+  return (url.split(/[?#]/)[0].split("/").pop() ?? "")
+    .toLowerCase()
     .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/-scaled$/i, "")
     .replace(/-\d{2,4}x\d{2,4}$/i, "")
     .replace(/-scaled$/i, "");
-  return base.split(/[-_]+/).filter(Boolean);
 }

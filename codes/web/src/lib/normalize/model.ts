@@ -231,18 +231,23 @@ export const assetSchema = z.object({
   source_page_id: z.string(),
   source_page_url: z.string(),
   original_url: z.string(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-  aspect: z.number().optional(),
-  mime: z.string().optional(),
+  width: z.number().nullable().optional(),
+  height: z.number().nullable().optional(),
+  aspect: z.number().nullable().optional(),
+  bytes: z.number().nullable().optional(),
+  mime: z.string().nullable().optional(),
   og_declared: z.boolean(),
   page_banner: z.boolean(),
-  caption: z.string().optional(),
+  caption: z.string().nullable().optional(),
   caption_source: captionSourceSchema,
   classification: assetClassificationSchema,
   is_photograph: z.boolean(),
+  /** Vision-derived; "unknown" when no vision signal exists (never fabricated). */
   crowding: z.union([z.literal("low"), z.literal("medium"), z.literal("high"), z.literal("unknown")]),
-  hero_suitability: z.number().optional(),
+  technical_quality: z.number().nullable().optional(),
+  composition_quality: z.number().nullable().optional(),
+  hero_suitability: z.number().nullable().optional(),
+  card_suitability: z.number().nullable().optional(),
   /** Subject this asset is (loosely) associated with + how strong the link is. */
   subject_ref: z
     .object({ kind: z.string(), id: z.string().optional(), confidence: z.number() })
@@ -288,6 +293,17 @@ export const accreditationSchema = z.object({
 });
 export type Accreditation = z.infer<typeof accreditationSchema>;
 
+// Hospital establishment — kept distinct from a predecessor clinic's founding
+// and from copyright/footer years (Sections 10–11). `value` is null when the
+// evidence does not support a clear HOSPITAL establishment date.
+export const establishedSchema = z.object({
+  value: z.number().nullable(),
+  precision: z.enum(["year", "month", "day", "unknown"]),
+  entity: z.string().nullable(),
+  evidence: z.array(evidenceSchema),
+});
+export type Established = z.infer<typeof establishedSchema>;
+
 export const narrativeSchema = z.object({
   about: z.array(z.object({ text: z.string(), evidence: z.array(evidenceSchema) })),
   founder: z
@@ -304,7 +320,16 @@ export type Narrative = z.infer<typeof narrativeSchema>;
 export const coverageSchema = z.object({
   pagesDiscovered: z.number(),
   pagesCrawled: z.number(),
+  /** Pages actually handed to the normalizer (crawled minus intentionally ignored). */
+  pagesSupplied: z.number().optional(),
   pagesParsed: z.number(),
+  pagesIgnored: z.number().optional(),
+  pagesFailed: z.number().optional(),
+  /** Pages deliberately excluded (NOT failures) — each with a reason. */
+  ignored: z
+    .array(z.object({ url: z.string(), reason: z.string() }))
+    .optional(),
+  /** Pages that could not be parsed (failures). */
   unparsed: z.array(
     z.object({ url: z.string(), reason: z.string(), parser: z.string().optional() }),
   ),
@@ -318,6 +343,7 @@ export type Coverage = z.infer<typeof coverageSchema>;
 export const normalizedHospitalSchema = z.object({
   status: hospitalStatusSchema,
   hospitalName: attested(z.string()).optional(),
+  established: establishedSchema,
   contact: contactSchema,
   location: locationSchema,
   emergency: emergencySchema,
