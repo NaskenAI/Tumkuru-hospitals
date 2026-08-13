@@ -1,21 +1,25 @@
 import { AlertTriangle } from "lucide-react";
-import { notFound } from "next/navigation";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import { PreviewRenderer } from "@/components/preview/preview-renderer";
+import { HospitalV1Render } from "@/components/hospital-v1/render";
 import { PreviewAnalytics } from "@/components/preview/preview-analytics";
 import { isAutomatedUserAgent } from "@/lib/analytics/automation";
-import type { GeneratedContent } from "@/lib/content/content-schema";
-import type { TemplateKey } from "@/lib/content/content-schema";
+import { buildHospitalV1 } from "@/lib/hospital-v1/build";
+import { toRenderModel } from "@/lib/hospital-v1/render-model";
+import { t, type Lang } from "@/lib/hospital-v1/strings";
+import { buildNormalizedHospitalForLead } from "@/lib/normalize/integration";
 import {
   createSupabaseServiceClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/server";
 
+// Canonical hospital preview: crawl → normalize → eligibility → Hospital V1.
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-type PreviewPageProps = {
+type PageProps = {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ lang?: string }>;
 };
@@ -27,38 +31,22 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-async function getPreviewData(slug: string) {
+async function getData(slug: string) {
   if (!isSupabaseConfigured()) return null;
-
   const supabase = createSupabaseServiceClient();
 
   const { data: preview } = await supabase
     .from("previews")
-    .select(
-      "id,lead_id,generated_content_id,slug,disclaimer_en,disclaimer_kn,status,stale_after",
-    )
+    .select("id,lead_id,slug,status,stale_after")
     .eq("slug", slug)
     .single();
-
   if (!preview || preview.status === "REMOVED") return null;
+  if (preview.stale_after && new Date(preview.stale_after) < new Date()) return null;
 
-  // Check staleness
-  if (preview.stale_after && new Date(preview.stale_after) < new Date()) {
-    return null;
-  }
+  const { model, eligibility } = await buildNormalizedHospitalForLead(supabase, preview.lead_id);
+  const data = buildHospitalV1(model, eligibility);
+  const renderModel = toRenderModel(model);
 
-  // Get content
-  const { data: contentRow } = await supabase
-    .from("generated_content")
-    .select("template_key,content_en,content_kn")
-    .eq("id", preview.generated_content_id!)
-    .single();
-
-  if (!contentRow) return null;
-
-  // Log the server-side open. Device category is set by the client page_viewed
-  // event (the server cannot determine it without fingerprinting). Automated /
-  // internal traffic (e.g. the screenshot job) is never counted.
   if (!isAutomatedUserAgent((await headers()).get("user-agent"))) {
     await supabase.from("analytics_events").insert({
       lead_id: preview.lead_id,
@@ -68,80 +56,33 @@ async function getPreviewData(slug: string) {
     });
   }
 
-  return {
-    preview,
-    templateKey: contentRow.template_key as TemplateKey,
-    contentEn: contentRow.content_en as unknown as GeneratedContent,
-    contentKn: contentRow.content_kn as unknown as GeneratedContent | null,
-  };
+  return { preview, model: renderModel, eligibility, data };
 }
 
-export default async function PreviewPage({ params, searchParams }: PreviewPageProps) {
+export default async function HospitalPreviewPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const { lang } = await searchParams;
-  const data = await getPreviewData(slug);
-
-  if (!data) {
-    notFound();
-  }
-
-  const isKannada = lang === "kn" && data.contentKn !== null;
-  const content = isKannada ? data.contentKn! : data.contentEn;
-  const disclaimer = isKannada
-    ? data.preview.disclaimer_kn ?? data.preview.disclaimer_en
-    : data.preview.disclaimer_en;
+  const { lang: langParam } = await searchParams;
+  const data = await getData(slug);
+  if (!data) notFound();
+  const lang: Lang = langParam === "kn" ? "kn" : "en";
 
   return (
-    <>
+    <div lang={lang}>
       <meta name="robots" content="noindex, nofollow" />
       <PreviewAnalytics slug={slug} />
-      <div className="min-h-screen bg-white">
-        {/* Disclaimer banner */}
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="mx-auto flex max-w-5xl items-start gap-3">
-            <AlertTriangle
-              className="mt-0.5 shrink-0 text-amber-600"
-              size={18}
-              aria-hidden="true"
-            />
-            <p className="text-xs leading-5 text-amber-900">{disclaimer}</p>
-          </div>
+      <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5">
+        <div className="mx-auto flex max-w-6xl items-start gap-2.5">
+          <AlertTriangle className="mt-0.5 shrink-0 text-amber-600" size={16} aria-hidden="true" />
+          <p className="text-xs leading-5 text-amber-900">{t("unofficial_preview", lang)}</p>
         </div>
-
-        {/* Language toggle */}
-        {data.contentKn && (
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
-            <div className="mx-auto flex max-w-5xl justify-end gap-2">
-              <a
-                href={`/preview/${slug}`}
-                className={`rounded-md px-3 py-1 text-xs font-medium ${!isKannada ? "bg-teal-700 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
-              >
-                English
-              </a>
-              <a
-                href={`/preview/${slug}?lang=kn`}
-                className={`rounded-md px-3 py-1 text-xs font-medium ${isKannada ? "bg-teal-700 text-white" : "bg-white text-slate-700 border border-slate-300"}`}
-              >
-                ಕನ್ನಡ
-              </a>
-            </div>
-          </div>
-        )}
-
-        {/* Preview content */}
-        <PreviewRenderer
-          content={content}
-          templateKey={data.templateKey}
-          slug={slug}
-        />
-
-        {/* Footer */}
-        <footer className="border-t border-slate-200 bg-slate-50 px-4 py-6">
-          <div className="mx-auto max-w-5xl text-center text-xs text-slate-500">
-            <p>Preview generated by Nasken AI — not an official hospital website.</p>
-          </div>
-        </footer>
       </div>
-    </>
+      <HospitalV1Render
+        data={data.data}
+        model={data.model}
+        eligibility={data.eligibility}
+        lang={lang}
+        slug={slug}
+      />
+    </div>
   );
 }
