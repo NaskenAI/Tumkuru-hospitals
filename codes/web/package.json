@@ -9,7 +9,6 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval": "vitest run src/eval",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

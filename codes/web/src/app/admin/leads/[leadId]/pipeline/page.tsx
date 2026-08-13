@@ -28,7 +28,6 @@ async function getLeadPipelineData(leadId: string) {
     { data: sources },
     { data: facts },
     { data: audits },
-    { data: content },
     { data: previews },
     { data: jobs },
     { data: analytics },
@@ -54,12 +53,6 @@ async function getLeadPipelineData(leadId: string) {
       .order("created_at", { ascending: false })
       .limit(1),
     supabase
-      .from("generated_content")
-      .select("id,template_key,status,created_at")
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: false })
-      .limit(1),
-    supabase
       .from("previews")
       .select(
         "id,slug,status,deployed_at,desktop_screenshot_path,mobile_screenshot_path",
@@ -79,7 +72,7 @@ async function getLeadPipelineData(leadId: string) {
       .eq("lead_id", leadId),
   ]);
 
-  return { lead, sources, facts, audits, content, previews, jobs, analytics };
+  return { lead, sources, facts, audits, previews, jobs, analytics };
 }
 
 type BreakdownItem = {
@@ -180,28 +173,14 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
     );
   }
 
-  const { lead, sources, facts, audits, content, previews, jobs, analytics } =
-    data;
+  const { lead, sources, facts, audits, previews, jobs, analytics } = data;
   const analyticsSummary = summarizeEvents(
     (analytics ?? []) as AnalyticsEventRow[],
   );
   const hasSources = (sources?.length ?? 0) > 0;
   const factCount = facts?.length ?? 0;
-  const verifiedCount = facts?.filter((f) => f.verification_status === "VERIFIED").length ?? 0;
   const hasAudit = (audits?.length ?? 0) > 0;
-  const hasContent = (content?.length ?? 0) > 0;
-  const contentStatus = content?.[0]?.status ?? null;
-  const enApproved =
-    contentStatus === "EN_APPROVED" ||
-    contentStatus === "KN_REVIEW_REQUIRED" ||
-    contentStatus === "KN_APPROVED" ||
-    contentStatus === "VALIDATED";
-  const hasKannada =
-    contentStatus === "KN_REVIEW_REQUIRED" ||
-    contentStatus === "KN_APPROVED" ||
-    contentStatus === "VALIDATED";
-  const knApproved =
-    contentStatus === "KN_APPROVED" || contentStatus === "VALIDATED";
+  const verifiedCount = facts?.filter((f) => f.verification_status === "VERIFIED").length ?? 0;
   const hasPreview = (previews?.length ?? 0) > 0;
   const previewSlug = previews?.[0]?.slug;
   const desktopShot = previews?.[0]?.desktop_screenshot_path ?? null;
@@ -309,78 +288,12 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
           </StepCard>
 
           <StepCard
-            title="5. Generate English Content"
-            status={hasContent ? (contentStatus === "BLOCKED" ? "error" : "done") : "pending"}
-            detail={hasContent ? `Template: ${content![0].template_key}, Status: ${contentStatus}` : "Not generated yet"}
-          >
-            <PipelineActionButton
-              leadId={leadId}
-              action="generate"
-              label="Generate"
-              disabled={verifiedCount === 0}
-            />
-          </StepCard>
-
-          <StepCard
-            title="6. Approve English (human gate)"
-            status={enApproved ? "done" : hasContent ? "blocked" : "pending"}
-            detail={
-              enApproved
-                ? "English approved by a human reviewer."
-                : "Review the English preview, then approve before translation."
-            }
-          >
-            <PipelineActionButton
-              leadId={leadId}
-              action="approve-en"
-              label="Approve English"
-              disabled={!hasContent || contentStatus === "BLOCKED" || enApproved}
-            />
-          </StepCard>
-
-          <StepCard
-            title="7. Translate to Kannada"
-            status={hasKannada ? "done" : "pending"}
-            detail={
-              enApproved
-                ? `Content status: ${contentStatus}`
-                : "Approve English first"
-            }
-          >
-            <PipelineActionButton
-              leadId={leadId}
-              action="translate"
-              label="Translate"
-              disabled={!enApproved}
-            />
-          </StepCard>
-
-          <StepCard
-            title="8. Approve Kannada (human gate)"
-            status={knApproved ? "done" : hasKannada ? "blocked" : "pending"}
-            detail={
-              knApproved
-                ? "Kannada approved by a human reviewer."
-                : "Review the Kannada preview, then approve before deploy."
-            }
-          >
-            <PipelineActionButton
-              leadId={leadId}
-              action="approve-kn"
-              label="Approve Kannada"
-              disabled={!hasKannada || knApproved}
-            />
-          </StepCard>
-
-          <StepCard
-            title="9. Deploy Preview"
-            status={hasPreview ? "done" : knApproved ? "pending" : "blocked"}
+            title="5. Deploy Preview (Hospital V1)"
+            status={hasPreview ? "done" : "pending"}
             detail={
               hasPreview
                 ? `Slug: ${previewSlug}`
-                : knApproved
-                  ? "Ready to deploy."
-                  : "Deploy is locked until English and Kannada are approved."
+                : "Create a Hospital V1 preview for this lead (requires a crawled, normalizable site)."
             }
           >
             <div className="flex gap-2">
@@ -388,7 +301,6 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
                 leadId={leadId}
                 action="deploy"
                 label="Deploy"
-                disabled={!knApproved}
               />
               {previewSlug && (
                 <a
@@ -405,7 +317,7 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
           </StepCard>
 
           <StepCard
-            title="10. Screenshots"
+            title="6. Screenshots"
             status={hasShots ? "done" : "pending"}
             detail={
               hasShots
