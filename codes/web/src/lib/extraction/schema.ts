@@ -15,6 +15,7 @@ export const extractedFactTypes = [
   "DOCTOR",
   "QUALIFICATION",
   "ACCREDITATION",
+  "AFFILIATION",
   "EMERGENCY",
   "INSURANCE",
   "PROCEDURE",
@@ -53,6 +54,10 @@ const highRiskFactTypes = new Set<ExtractedFactType>([
   "DOCTOR",
   "QUALIFICATION",
   "ACCREDITATION",
+  // A doctor's professional-society membership — a credential claim, and NOT a
+  // hospital accreditation. Kept separate so it can never render as an
+  // accreditation badge.
+  "AFFILIATION",
   "EMERGENCY",
   "INSURANCE",
   "PROCEDURE",

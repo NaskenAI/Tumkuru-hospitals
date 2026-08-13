@@ -298,6 +298,7 @@ export type Database = {
           status: PreviewStatus;
           desktop_screenshot_path: string | null;
           mobile_screenshot_path: string | null;
+          puck_data: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -314,6 +315,7 @@ export type Database = {
           status?: PreviewStatus;
           desktop_screenshot_path?: string | null;
           mobile_screenshot_path?: string | null;
+          puck_data?: Json | null;
           created_at?: string;
           updated_at?: string;
         };

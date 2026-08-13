@@ -29,6 +29,11 @@ describe("authorization surface (P0-1)", () => {
     expect(isPublicPath("/admin/leads/abc/facts")).toBe(false);
   });
 
+  it("keeps the Puck editor + its save API protected (never public)", () => {
+    expect(isPublicPath("/admin/previews/abc/design")).toBe(false);
+    expect(isPublicPath("/api/previews/abc/design")).toBe(false);
+  });
+
   it("allows only the intended public paths", () => {
     expect(isPublicPath("/admin/login")).toBe(true);
     expect(isPublicPath("/api/auth/login")).toBe(true);
