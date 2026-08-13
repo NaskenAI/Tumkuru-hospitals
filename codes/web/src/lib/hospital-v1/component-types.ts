@@ -21,5 +21,3 @@ export const HOSPITAL_V1_COMPONENT_TYPES = [
   "ContactLocation",
   "HospitalFooter",
 ] as const;
-
-export type HospitalV1ComponentType = (typeof HOSPITAL_V1_COMPONENT_TYPES)[number];

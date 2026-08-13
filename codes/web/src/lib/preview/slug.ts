@@ -14,13 +14,6 @@ export function generatePreviewSlug(length: number = defaultSlugLength): string 
 }
 
 /**
- * Build the full preview path for a slug.
- */
-export function previewPath(slug: string): string {
-  return `/preview/${slug}`;
-}
-
-/**
  * Stale date: 90 days from now.
  */
 export function computeStaleAfter(now: Date = new Date()): Date {
