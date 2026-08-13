@@ -1,11 +1,50 @@
 import { describe, expect, it } from "vitest";
 
-import { fetchPageText } from "@/lib/research/safe-fetch";
+import { fetchPageText, fetchSafeImage } from "@/lib/research/safe-fetch";
 import type { ResolveHostname } from "@/lib/research/safe-url";
 
 const publicResolver: ResolveHostname = async () => [
   { address: "8.8.8.8", family: 4 },
 ];
+
+describe("fetchSafeImage (asset proxy fetcher)", () => {
+  it("returns bytes for a raster image", async () => {
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const img = await fetchSafeImage("https://cdn.example/logo.png", {
+      resolveHostname: publicResolver,
+      fetchImpl: async () =>
+        new Response(png, { status: 200, headers: { "content-type": "image/png" } }),
+    });
+    expect(img.contentType).toBe("image/png");
+    expect(img.bytes.length).toBe(8);
+  });
+
+  it("rejects SVG (active-content vector) even though MIME is image/*", async () => {
+    await expect(
+      fetchSafeImage("https://cdn.example/x.svg", {
+        resolveHostname: publicResolver,
+        fetchImpl: async () =>
+          new Response('<svg onload="alert(1)"></svg>', {
+            status: 200,
+            headers: { "content-type": "image/svg+xml" },
+          }),
+      }),
+    ).rejects.toThrow(/Unsupported image type/);
+  });
+
+  it("rejects a non-image response", async () => {
+    await expect(
+      fetchSafeImage("https://cdn.example/x", {
+        resolveHostname: publicResolver,
+        fetchImpl: async () =>
+          new Response("<html></html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          }),
+      }),
+    ).rejects.toThrow(/Unsupported image type/);
+  });
+});
 
 describe("fetchPageText", () => {
   it("extracts visible text from HTML without scripts", async () => {

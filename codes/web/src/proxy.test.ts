@@ -39,6 +39,8 @@ describe("authorization surface (P0-1)", () => {
     expect(isPublicPath("/api/auth/login")).toBe(true);
     expect(isPublicPath("/api/auth/logout")).toBe(true);
     expect(isPublicPath("/api/analytics")).toBe(true);
+    // Asset proxy serves only APPROVED first-party images to the public preview.
+    expect(isPublicPath("/api/assets/abc")).toBe(true);
   });
 
   it("does not treat lookalike paths as public", () => {
@@ -46,5 +48,7 @@ describe("authorization surface (P0-1)", () => {
     expect(isPublicPath("/api/authx/thing")).toBe(false);
     expect(isPublicPath("/api/analyticsX")).toBe(false);
     expect(isPublicPath("/api/analytics-fake")).toBe(false);
+    expect(isPublicPath("/api/assetsX")).toBe(false);
+    expect(isPublicPath("/api/assets")).toBe(false);
   });
 });

@@ -129,6 +129,9 @@ export type Database = {
           raw_text: string | null;
           raw_html: string | null;
           title: string | null;
+          page_type: string | null;
+          discovered_from: string | null;
+          crawl_depth: number | null;
           raw_text_expires_at: string | null;
           notes: string | null;
           created_at: string;
@@ -144,6 +147,9 @@ export type Database = {
           raw_text?: string | null;
           raw_html?: string | null;
           title?: string | null;
+          page_type?: string | null;
+          discovered_from?: string | null;
+          crawl_depth?: number | null;
           raw_text_expires_at?: string | null;
           notes?: string | null;
           created_at?: string;
@@ -407,6 +413,48 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "jobs_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "leads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      hospital_assets: {
+        Row: {
+          id: string;
+          lead_id: string;
+          source_id: string | null;
+          source_page_url: string | null;
+          original_asset_url: string;
+          mime_type: string | null;
+          width: number | null;
+          height: number | null;
+          alt_text: string | null;
+          classification: string;
+          quality_score: number;
+          approval_status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          source_id?: string | null;
+          source_page_url?: string | null;
+          original_asset_url: string;
+          mime_type?: string | null;
+          width?: number | null;
+          height?: number | null;
+          alt_text?: string | null;
+          classification?: string;
+          quality_score?: number;
+          approval_status?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["hospital_assets"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "hospital_assets_lead_id_fkey";
             columns: ["lead_id"];
             isOneToOne: false;
             referencedRelation: "leads";

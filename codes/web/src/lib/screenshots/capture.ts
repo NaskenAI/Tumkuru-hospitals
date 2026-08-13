@@ -8,6 +8,8 @@
  * the stage is recorded as failed + retryable (never crashes the pipeline).
  */
 
+import { NASKEN_SCREENSHOT_UA } from "@/lib/analytics/automation";
+
 export type Viewport = { width: number; height: number };
 
 export const DESKTOP_VIEWPORT: Viewport = { width: 1440, height: 900 };
@@ -63,6 +65,7 @@ type PlaywrightModule = {
       newPage: (opts?: {
         viewport?: Viewport;
         deviceScaleFactor?: number;
+        userAgent?: string;
       }) => Promise<{
         goto: (url: string, opts?: unknown) => Promise<unknown>;
         screenshot: (opts?: {
@@ -88,7 +91,13 @@ export const playwrightCapture: CaptureFn = async ({ url, viewport, fullPage }) 
 
   const browser = await pw.chromium.launch();
   try {
-    const page = await browser.newPage({ viewport, deviceScaleFactor: 2 });
+    // Identify as the internal bot so preview opens by the screenshot job are
+    // excluded from prospect-engagement analytics.
+    const page = await browser.newPage({
+      viewport,
+      deviceScaleFactor: 2,
+      userAgent: NASKEN_SCREENSHOT_UA,
+    });
     await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
     return await page.screenshot({ fullPage, type: "png" });
   } finally {

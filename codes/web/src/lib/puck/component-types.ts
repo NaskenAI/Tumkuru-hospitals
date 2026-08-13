@@ -9,6 +9,7 @@ export const HOSPITAL_COMPONENT_TYPES = [
   "EmergencyStrip",
   "QuickActions",
   "SpecialtyGrid",
+  "HospitalGallery",
   "DoctorGrid",
   "AboutHospital",
   "StatsSection",

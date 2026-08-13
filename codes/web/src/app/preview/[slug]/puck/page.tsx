@@ -6,6 +6,11 @@ import type { Data } from "@measured/puck";
 import { PuckPreview } from "@/components/puck/puck-preview";
 import { PreviewAnalytics } from "@/components/preview/preview-analytics";
 import { defaultPuckPage, sanitizePuckData } from "@/lib/puck/default-page";
+import { headers } from "next/headers";
+
+import { approvedAssetsForLead } from "@/lib/assets/select";
+import { isAutomatedUserAgent } from "@/lib/analytics/automation";
+import { chooseTheme } from "@/lib/puck/theme";
 import type { GeneratedContent } from "@/lib/content/content-schema";
 import {
   createSupabaseServiceClient,
@@ -48,18 +53,25 @@ async function getData(slug: string) {
     .single();
   if (!contentRow) return null;
 
-  // Public view of the preview — record the open (device set by client event).
-  await supabase.from("analytics_events").insert({
-    lead_id: preview.lead_id,
-    preview_id: preview.id,
-    event: "preview_opened",
-    device_category: null,
-  });
+  // Public view of the preview — record the open (device set by client event),
+  // but never for automated/internal traffic (e.g. the screenshot job).
+  if (!isAutomatedUserAgent((await headers()).get("user-agent"))) {
+    await supabase.from("analytics_events").insert({
+      lead_id: preview.lead_id,
+      preview_id: preview.id,
+      event: "preview_opened",
+      device_category: null,
+    });
+  }
+
+  // Approved first-party imagery for this hospital (logo / hero / photo band).
+  const assets = await approvedAssetsForLead(supabase, preview.lead_id);
 
   return {
     preview,
     contentEn: contentRow.content_en as unknown as GeneratedContent,
     contentKn: contentRow.content_kn as unknown as GeneratedContent | null,
+    assets,
   };
 }
 
@@ -114,7 +126,14 @@ export default async function PuckPreviewPage({ params, searchParams }: PageProp
           </div>
         )}
 
-        <PuckPreview data={puckData} content={content} lang={isKannada ? "kn" : "en"} slug={slug} />
+        <PuckPreview
+          data={puckData}
+          content={content}
+          lang={isKannada ? "kn" : "en"}
+          slug={slug}
+          assets={data.assets}
+          theme={chooseTheme(content)}
+        />
       </div>
     </>
   );

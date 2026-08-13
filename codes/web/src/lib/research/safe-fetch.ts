@@ -225,6 +225,85 @@ async function readResponseBody(response: Response, maxBytes: number) {
   return new TextDecoder().decode(concatChunks(chunks, received));
 }
 
+export type FetchedImage = {
+  finalUrl: string;
+  contentType: string;
+  bytes: Uint8Array;
+};
+
+/**
+ * SSRF-safe image fetch for the first-party asset proxy. Same host/DNS-pinning
+ * guarantees as fetchPageText, but returns raw bytes and requires an image
+ * content type. Callers must only pass URLs already stored as approved
+ * first-party assets (this is a proxy, not an open fetcher).
+ */
+export async function fetchSafeImage(
+  input: string,
+  options: FetchPageTextOptions = {},
+): Promise<FetchedImage> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const resolveHostname = options.resolveHostname ?? defaultResolveHostname;
+  const maxRedirects = options.maxRedirects ?? defaultOptions.maxRedirects;
+  const maxBytes = options.maxBytes ?? defaultOptions.maxBytes;
+  const timeoutMs = options.timeoutMs ?? defaultOptions.timeoutMs;
+
+  let currentUrl = parseSafeHttpUrl(input);
+  const usePinning = !options.fetchImpl;
+
+  for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
+    const addresses = await assertPublicHostname(currentUrl.hostname, resolveHostname);
+    const pinned = usePinning ? await createPinnedDispatcher(addresses[0]) : undefined;
+    try {
+      const response = await fetchWithTimeout(fetchImpl, currentUrl, timeoutMs, pinned?.dispatcher);
+
+      if (isRedirect(response.status)) {
+        if (redirectCount === maxRedirects) {
+          throw new FetchSafetyError("Redirect limit exceeded.");
+        }
+        const location = response.headers.get("location");
+        if (!location) {
+          throw new FetchSafetyError("Redirect response did not include a location.");
+        }
+        currentUrl = parseSafeHttpUrl(new URL(location, currentUrl));
+        continue;
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      // Raster images only. SVG is an active-content vector (can embed script),
+      // so it is rejected even though its MIME starts with "image/".
+      if (!/^image\//i.test(contentType) || /svg/i.test(contentType)) {
+        throw new FetchSafetyError(`Unsupported image type: ${contentType}`);
+      }
+      const bytes = await readResponseBytes(response, maxBytes);
+      return { finalUrl: currentUrl.toString(), contentType, bytes };
+    } finally {
+      await pinned?.close();
+    }
+  }
+
+  throw new FetchSafetyError("Unexpected redirect handling failure.");
+}
+
+async function readResponseBytes(response: Response, maxBytes: number) {
+  if (!response.body) return new Uint8Array(0);
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > maxBytes) {
+      throw new FetchSafetyError("Response exceeded maximum size.");
+    }
+    chunks.push(value);
+  }
+
+  return concatChunks(chunks, received);
+}
+
 function concatChunks(chunks: Uint8Array[], totalLength: number) {
   const merged = new Uint8Array(totalLength);
   let offset = 0;

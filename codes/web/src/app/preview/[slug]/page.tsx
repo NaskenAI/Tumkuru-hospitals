@@ -1,9 +1,11 @@
 import { AlertTriangle } from "lucide-react";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 
 import { PreviewRenderer } from "@/components/preview/preview-renderer";
 import { PreviewAnalytics } from "@/components/preview/preview-analytics";
+import { isAutomatedUserAgent } from "@/lib/analytics/automation";
 import type { GeneratedContent } from "@/lib/content/content-schema";
 import type { TemplateKey } from "@/lib/content/content-schema";
 import {
@@ -55,13 +57,16 @@ async function getPreviewData(slug: string) {
   if (!contentRow) return null;
 
   // Log the server-side open. Device category is set by the client page_viewed
-  // event (the server cannot determine it without fingerprinting).
-  await supabase.from("analytics_events").insert({
-    lead_id: preview.lead_id,
-    preview_id: preview.id,
-    event: "preview_opened",
-    device_category: null,
-  });
+  // event (the server cannot determine it without fingerprinting). Automated /
+  // internal traffic (e.g. the screenshot job) is never counted.
+  if (!isAutomatedUserAgent((await headers()).get("user-agent"))) {
+    await supabase.from("analytics_events").insert({
+      lead_id: preview.lead_id,
+      preview_id: preview.id,
+      event: "preview_opened",
+      device_category: null,
+    });
+  }
 
   return {
     preview,
