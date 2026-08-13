@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeDigitalGapScore, computeCommercialFitScore } from "@/lib/audit/score";
+import { computeDigitalGapScore, computePreviewReadinessScore } from "@/lib/audit/score";
 import { mergeScoringConfig, DEFAULT_SCORING_CONFIG } from "@/lib/audit/scoring-config";
 import type { AuditCheckResult } from "@/lib/audit/checks";
 
@@ -34,7 +34,7 @@ describe("configurable scoring", () => {
 
   it("respects overridden fit weights", () => {
     const config = mergeScoringConfig({ fit: { phone: 25 } });
-    const { score } = computeCommercialFitScore(
+    const { score } = computePreviewReadinessScore(
       [
         {
           fact_type: "PHONE",

@@ -28,6 +28,8 @@ export type FetchedPageText = {
    * <meta name="viewport">, <title>, and <a href="tel:">. Null for non-HTML.
    */
   rawHtml: string | null;
+  /** The page <title>, used as a human-readable source label. Null if absent. */
+  title: string | null;
 };
 
 const defaultOptions = {
@@ -106,6 +108,7 @@ export async function fetchPageText(
         contentType,
         rawText: extractText(body, contentType),
         rawHtml: isHtml ? body : null,
+        title: isHtml ? extractTitle(body) : null,
       };
     } finally {
       await pinned?.close();
@@ -158,15 +161,25 @@ async function createPinnedDispatcher(
     };
     const agent = new undici.Agent({
       connect: {
+        // Node/undici may call lookup in either dns.lookup form: with
+        // { all: true } expecting an array, or scalar expecting (addr, family).
         lookup: (
           _hostname: string,
-          _options: unknown,
-          callback: (
-            err: Error | null,
-            addr: string,
-            family: number,
-          ) => void,
-        ) => callback(null, address.address, address.family),
+          options: unknown,
+          callback: (err: Error | null, addr: unknown, family?: number) => void,
+        ) => {
+          const wantsAll =
+            typeof options === "object" &&
+            options !== null &&
+            (options as { all?: boolean }).all === true;
+          if (wantsAll) {
+            callback(null, [
+              { address: address.address, family: address.family },
+            ]);
+          } else {
+            callback(null, address.address, address.family);
+          }
+        },
       },
     });
     return { dispatcher: agent, close: () => agent.close() };
@@ -222,6 +235,12 @@ function concatChunks(chunks: Uint8Array[], totalLength: number) {
   }
 
   return merged;
+}
+
+export function extractTitle(body: string): string | null {
+  const $ = cheerio.load(body);
+  const title = $("title").first().text().trim();
+  return title.length > 0 ? title.slice(0, 300) : null;
 }
 
 export function extractText(body: string, contentType: string) {

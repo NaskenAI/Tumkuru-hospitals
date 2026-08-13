@@ -79,7 +79,7 @@ export async function POST(
       website_url: websiteUrl,
       checks: auditResult.checks as unknown as Json,
       digital_gap_score: gapResult.score,
-      commercial_fit_score: 0, // Will be computed in score step
+      preview_readiness_score: 0, // Will be computed in score step
       score_breakdown: gapResult.breakdown as unknown as Json,
     })
     .select()

@@ -152,13 +152,23 @@ export function checkWhatsappOrDirections(html: string): AuditCheckResult {
 export function checkDoctorsListed(html: string): AuditCheckResult {
   const $ = cheerio.load(html);
   const bodyText = $("body").text().toLowerCase();
-  const passed =
-    bodyText.includes("dr.") ||
-    bodyText.includes("doctor") ||
-    bodyText.includes("physician") ||
-    bodyText.includes("surgeon") ||
-    bodyText.includes("mbbs") ||
-    bodyText.includes("our team");
+
+  // Strong, unambiguous medical signals.
+  const strong =
+    /\b(doctors?|physicians?|surgeons?|cardiologists?|gyn[ae]?cologists?|p[ae]diatricians?|orthop[ae]dician|consultants?)\b/.test(
+      bodyText,
+    ) ||
+    /\bmbbs\b/.test(bodyText) ||
+    /our (doctors|team of doctors|medical team)/.test(bodyText);
+
+  // A bare "Dr. <Name>" is NOT enough on its own — it matches non-medical
+  // proper nouns like "Dr. B.R. Ambedkar Development Corporation". Only count it
+  // when a genuine medical qualification also appears on the page.
+  const drWithQualification =
+    /\bdr\.?\s+[a-z]/.test(bodyText) &&
+    /\b(mbbs|dnb|dgo|bds|mds|mch|dm| dgo)\b/.test(bodyText);
+
+  const passed = strong || drWithQualification;
   return {
     name: "doctors_listed",
     label: "Doctors listed",
@@ -215,6 +225,18 @@ export function checkOutdatedSignals(html: string): AuditCheckResult {
       : `Outdated signals: ${signals.join(", ")}`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// DEFERRED — not required for pilot
+//
+// Two audit checks are intentionally NOT implemented for the pilot:
+//   - Broken-link testing: would require fetching every outbound link, which
+//     re-opens the SSRF surface and is slow. Deferred.
+//   - Real load-time / performance testing: needs a headless browser + timing
+//     harness. Deferred.
+// These are documented as deferred rather than stubbed, so nothing implies they
+// work. The checks below all run against real fetched HTML.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Run all checks

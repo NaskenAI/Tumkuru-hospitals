@@ -29,6 +29,7 @@ export async function collectSourceSnapshot(
     httpStatus: fetched.httpStatus,
     rawText: fetched.rawText,
     rawHtml: fetched.rawHtml,
+    title: fetched.title,
     now: input.now,
   });
 }
@@ -40,6 +41,7 @@ export function buildSourceSnapshot(
     httpStatus: number;
     rawText: string;
     rawHtml?: string | null;
+    title?: string | null;
     now?: Date;
   },
 ): SourceSnapshot {
@@ -56,6 +58,7 @@ export function buildSourceSnapshot(
     content_hash: hashSourceText(fetched.finalUrl, fetched.rawText),
     raw_text: fetched.rawText,
     raw_html: fetched.rawHtml ?? null,
+    title: fetched.title ?? null,
     raw_text_expires_at: rawTextExpiresAt.toISOString(),
     notes: input.notes ?? null,
   };

@@ -12,7 +12,10 @@
  * prove the downstream guardrails reject it.
  */
 
-import type { ExtractionOutput } from "@/lib/extraction/schema";
+import type {
+  ExtractionOutput,
+  ExtractedFactType,
+} from "@/lib/extraction/schema";
 import type { GoldFact } from "@/eval/metrics";
 import type { VerifiedFact } from "@/lib/content/claim-validator";
 import type { GeneratedContent } from "@/lib/content/content-schema";
@@ -304,10 +307,127 @@ const injectionMultiChannel: Fixture = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Additional synthetic golden edge cases (fictional) — bring the golden set to
+// 10+. Each candidateExtraction excerpt is an exact substring of sourceText.
+// ---------------------------------------------------------------------------
+
+function golden(
+  id: string,
+  sourceText: string,
+  facts: Array<{
+    fact_type: ExtractedFactType;
+    value: string;
+    source_excerpt: string;
+  }>,
+): Fixture {
+  return {
+    id,
+    title: `${id} (fictional)`,
+    kind: "golden",
+    sourceUrl: `https://${id}.example`,
+    retrievalDate: "2026-08-05",
+    sourceText,
+    goldFacts: facts.map((f) => ({ fact_type: f.fact_type, value: f.value })),
+    candidateExtraction: { facts },
+  };
+}
+
+const dentalClinic = golden(
+  "smile-dental-clinic",
+  "Smile Dental Clinic, Tumakuru. Dr. Kiran Shetty, BDS, MDS. Services: root canal, dental implants, teeth cleaning. Call 0816-2551234. Open Mon-Sat 10 AM to 7 PM.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Smile Dental Clinic", source_excerpt: "Smile Dental Clinic, Tumakuru" },
+    { fact_type: "DOCTOR", value: "Dr. Kiran Shetty", source_excerpt: "Dr. Kiran Shetty, BDS, MDS" },
+    { fact_type: "QUALIFICATION", value: "BDS, MDS", source_excerpt: "Dr. Kiran Shetty, BDS, MDS" },
+    { fact_type: "SERVICE", value: "root canal", source_excerpt: "Services: root canal, dental implants" },
+    { fact_type: "PHONE", value: "0816-2551234", source_excerpt: "Call 0816-2551234" },
+    { fact_type: "HOURS", value: "Mon-Sat 10 AM to 7 PM", source_excerpt: "Open Mon-Sat 10 AM to 7 PM" },
+  ],
+);
+
+const maternityHospital = golden(
+  "sri-lakshmi-maternity",
+  "Sri Lakshmi Maternity Hospital, Tumakuru. Specialty: Obstetrics and Gynaecology. Dr. Radha Prasad, MBBS, MD (OBG). Services include antenatal care, normal delivery, and caesarean section. Contact 0816-2662345.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Sri Lakshmi Maternity Hospital", source_excerpt: "Sri Lakshmi Maternity Hospital, Tumakuru" },
+    { fact_type: "SPECIALTY", value: "Obstetrics and Gynaecology", source_excerpt: "Specialty: Obstetrics and Gynaecology" },
+    { fact_type: "DOCTOR", value: "Dr. Radha Prasad", source_excerpt: "Dr. Radha Prasad, MBBS, MD (OBG)" },
+    { fact_type: "QUALIFICATION", value: "MBBS, MD (OBG)", source_excerpt: "Dr. Radha Prasad, MBBS, MD (OBG)" },
+    { fact_type: "SERVICE", value: "antenatal care", source_excerpt: "Services include antenatal care" },
+    { fact_type: "PHONE", value: "0816-2662345", source_excerpt: "Contact 0816-2662345" },
+  ],
+);
+
+const eyeHospital = golden(
+  "clear-vision-eye",
+  "Clear Vision Eye Hospital, Tumakuru. Ophthalmology specialists. Cataract surgery, LASIK, and diabetic retinopathy screening. Dr. Nagaraj B, MS Ophthalmology. Email info@clearvision.example.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Clear Vision Eye Hospital", source_excerpt: "Clear Vision Eye Hospital, Tumakuru" },
+    { fact_type: "SPECIALTY", value: "Ophthalmology", source_excerpt: "Ophthalmology specialists" },
+    { fact_type: "SERVICE", value: "Cataract surgery", source_excerpt: "Cataract surgery, LASIK" },
+    { fact_type: "DOCTOR", value: "Dr. Nagaraj B", source_excerpt: "Dr. Nagaraj B, MS Ophthalmology" },
+    { fact_type: "EMAIL", value: "info@clearvision.example", source_excerpt: "Email info@clearvision.example" },
+  ],
+);
+
+const physioClinic = golden(
+  "active-life-physio",
+  "Active Life Physiotherapy Clinic in Tumakuru. Physiotherapy and rehabilitation services. Sports injury recovery and post-surgical rehab. Phone 9845012345.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Active Life Physiotherapy Clinic", source_excerpt: "Active Life Physiotherapy Clinic in Tumakuru" },
+    { fact_type: "SERVICE", value: "Physiotherapy and rehabilitation", source_excerpt: "Physiotherapy and rehabilitation services" },
+    { fact_type: "PHONE", value: "9845012345", source_excerpt: "Phone 9845012345" },
+  ],
+);
+
+const bigMultispecialty = golden(
+  "gubbi-multispecialty",
+  "Gubbi Multispecialty Hospital, Tumakuru. Departments: Cardiology, Neurology, Orthopedics, Nephrology. NABH accredited. Doctors: Dr. Anil Kumar (Cardiology), Dr. Sneha Rao (Neurology). 24 hour emergency and ambulance service. Phone 0816-2773456.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Gubbi Multispecialty Hospital", source_excerpt: "Gubbi Multispecialty Hospital, Tumakuru" },
+    { fact_type: "SPECIALTY", value: "Cardiology", source_excerpt: "Departments: Cardiology, Neurology" },
+    { fact_type: "SPECIALTY", value: "Neurology", source_excerpt: "Cardiology, Neurology, Orthopedics" },
+    { fact_type: "SPECIALTY", value: "Orthopedics", source_excerpt: "Neurology, Orthopedics, Nephrology" },
+    { fact_type: "ACCREDITATION", value: "NABH accredited", source_excerpt: "NABH accredited" },
+    { fact_type: "DOCTOR", value: "Dr. Anil Kumar", source_excerpt: "Dr. Anil Kumar (Cardiology)" },
+    { fact_type: "EMERGENCY", value: "24 hour emergency", source_excerpt: "24 hour emergency and ambulance service" },
+    { fact_type: "PHONE", value: "0816-2773456", source_excerpt: "Phone 0816-2773456" },
+  ],
+);
+
+const govDirectory = golden(
+  "amrutha-nursing-home",
+  "Amrutha Nursing Home — Tumakuru District Health Directory listing. Address: Kunigal Road, Tumakuru. Phone: 08132-221100. General medicine and minor surgery.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Amrutha Nursing Home", source_excerpt: "Amrutha Nursing Home — Tumakuru District Health Directory listing" },
+    { fact_type: "ADDRESS", value: "Kunigal Road, Tumakuru", source_excerpt: "Address: Kunigal Road, Tumakuru" },
+    { fact_type: "PHONE", value: "08132-221100", source_excerpt: "Phone: 08132-221100" },
+    { fact_type: "SERVICE", value: "General medicine", source_excerpt: "General medicine and minor surgery" },
+  ],
+);
+
+const kannadaName = golden(
+  "sri-siddaganga-kn",
+  "ಶ್ರೀ ಸಿದ್ಧಗಂಗಾ ಆಸ್ಪತ್ರೆ (Sri Siddaganga Hospital), Tumakuru. General medicine and pediatrics. Phone 0816-2884567.",
+  [
+    { fact_type: "HOSPITAL_NAME", value: "Sri Siddaganga Hospital", source_excerpt: "(Sri Siddaganga Hospital), Tumakuru" },
+    { fact_type: "SPECIALTY", value: "pediatrics", source_excerpt: "General medicine and pediatrics" },
+    { fact_type: "PHONE", value: "0816-2884567", source_excerpt: "Phone 0816-2884567" },
+  ],
+);
+
 export const fixtures: Fixture[] = [
   kalpataru,
   siddaganga,
   devarayanadurga,
+  dentalClinic,
+  maternityHospital,
+  eyeHospital,
+  physioClinic,
+  bigMultispecialty,
+  govDirectory,
+  kannadaName,
   injectionSuperlative,
   injectionFakeDoctor,
   injectionMultiChannel,

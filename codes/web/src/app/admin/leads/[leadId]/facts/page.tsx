@@ -2,6 +2,7 @@ import { AlertCircle, ArrowLeft, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 
 import { FactReviewControls } from "@/components/leads/fact-review-controls";
+import { detectConflicts } from "@/lib/facts/conflicts";
 import type { Json, RiskTier, VerificationStatus } from "@/lib/database/types";
 import {
   createSupabaseServiceClient,
@@ -29,7 +30,12 @@ type FactRow = {
   source_excerpt: string | null;
   verification_status: VerificationStatus;
   created_at: string;
-  source: { url: string | null; retrieved_at: string | null } | null;
+  source_id: string | null;
+  source: {
+    url: string | null;
+    retrieved_at: string | null;
+    title: string | null;
+  } | null;
 };
 
 async function getLeadAndFacts(leadId: string): Promise<{
@@ -56,7 +62,7 @@ async function getLeadAndFacts(leadId: string): Promise<{
       supabase
         .from("hospital_facts")
         .select(
-          "id,fact_type,value,risk_tier,source_excerpt,verification_status,created_at,source:sources(url,retrieved_at)",
+          "id,fact_type,value,risk_tier,source_excerpt,verification_status,created_at,source_id,source:sources(url,retrieved_at,title)",
         )
         .eq("lead_id", leadId)
         .order("created_at", { ascending: true }),
@@ -74,6 +80,14 @@ export default async function LeadFactReviewPage({
 }: LeadFactReviewPageProps) {
   const { leadId } = await params;
   const { lead, facts, error } = await getLeadAndFacts(leadId);
+  const conflicts = detectConflicts(
+    facts.map((f) => ({
+      id: f.id,
+      fact_type: f.fact_type,
+      value: f.value,
+      source_id: f.source_id,
+    })),
+  );
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -96,6 +110,35 @@ export default async function LeadFactReviewPage({
             )}
           </div>
         </header>
+
+        {conflicts.length > 0 && (
+          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <h2 className="text-sm font-semibold">
+              ⚠ {conflicts.length} source conflict
+              {conflicts.length > 1 ? "s" : ""} — human decision required
+            </h2>
+            <p className="mt-1 text-xs">
+              Different sources disagree on these facts. Verify the correct value
+              and reject the others. Do not approve a conflicting fact without
+              resolving it.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {conflicts.map((c) => (
+                <li key={c.fact_type} className="text-xs">
+                  <span className="font-semibold">{c.fact_type}:</span>{" "}
+                  {c.variants.map((v, i) => (
+                    <span key={i}>
+                      {i > 0 && " vs "}
+                      <span className="rounded bg-white px-1.5 py-0.5">
+                        {v.value}
+                      </span>
+                    </span>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {error ? (
           <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-950">

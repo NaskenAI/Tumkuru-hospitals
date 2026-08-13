@@ -44,15 +44,19 @@ describe("source collection", () => {
       {
         resolveHostname: publicResolver,
         fetchImpl: async () =>
-          new Response("<main>ABC Hospital</main>", {
-            status: 200,
-            headers: { "content-type": "text/html" },
-          }),
+          new Response(
+            "<html><head><title>ABC Hospital</title></head><body><main>ABC Hospital</main></body></html>",
+            {
+              status: 200,
+              headers: { "content-type": "text/html" },
+            },
+          ),
       },
     );
 
     expect(snapshot.url).toBe("https://example.com/");
     expect(snapshot.raw_text).toBe("ABC Hospital");
-    expect(snapshot.raw_html).toBe("<main>ABC Hospital</main>");
+    expect(snapshot.raw_html).toContain("<main>ABC Hospital</main>");
+    expect(snapshot.title).toBe("ABC Hospital");
   });
 });

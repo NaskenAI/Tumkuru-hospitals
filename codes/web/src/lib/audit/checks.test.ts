@@ -58,6 +58,24 @@ describe("website audit structural checks", () => {
     expect(check?.detail).toContain("Directions");
   });
 
+  it("does NOT count 'Dr. <non-medical name>' as a doctor listing (regression)", () => {
+    // Real false positive from the Tumakuru District Hospital gov page:
+    // "Dr.B.R. Ambedkar Development Corporation" must NOT pass doctors_listed.
+    const html =
+      "<html><body><p>Dr.B.R. Ambedkar Development Corporation LTD</p><p>Kunigal Road</p></body></html>";
+    expect(checkByName(html, "doctors_listed")?.passed).toBe(false);
+  });
+
+  it("counts a real doctor roster", () => {
+    const withWord =
+      "<html><body><h2>Our Doctors</h2><p>Consultant physician on duty.</p></body></html>";
+    expect(checkByName(withWord, "doctors_listed")?.passed).toBe(true);
+
+    const drPlusQual =
+      "<html><body><p>Dr. Meena Rao, MBBS, MS</p></body></html>";
+    expect(checkByName(drPlusQual, "doctors_listed")?.passed).toBe(true);
+  });
+
   it("would falsely fail structural checks on stripped text (the P0-2 bug)", () => {
     // This documents why raw_html is required: tag/attribute checks cannot
     // succeed on text that has had all markup removed.

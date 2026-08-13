@@ -85,7 +85,7 @@ export type Database = {
           duplicate_of: string | null;
           status: LeadStatus;
           digital_gap_score: number | null;
-          commercial_fit_score: number | null;
+          preview_readiness_score: number | null;
           score_breakdown: Json;
           notes: string | null;
           created_at: string;
@@ -108,7 +108,7 @@ export type Database = {
           duplicate_of?: string | null;
           status?: LeadStatus;
           digital_gap_score?: number | null;
-          commercial_fit_score?: number | null;
+          preview_readiness_score?: number | null;
           score_breakdown?: Json;
           notes?: string | null;
           created_at?: string;
@@ -128,6 +128,7 @@ export type Database = {
           content_hash: string | null;
           raw_text: string | null;
           raw_html: string | null;
+          title: string | null;
           raw_text_expires_at: string | null;
           notes: string | null;
           created_at: string;
@@ -142,6 +143,7 @@ export type Database = {
           content_hash?: string | null;
           raw_text?: string | null;
           raw_html?: string | null;
+          title?: string | null;
           raw_text_expires_at?: string | null;
           notes?: string | null;
           created_at?: string;
@@ -214,7 +216,7 @@ export type Database = {
           website_url: string | null;
           checks: Json;
           digital_gap_score: number;
-          commercial_fit_score: number;
+          preview_readiness_score: number;
           score_breakdown: Json;
           created_at: string;
         };
@@ -225,7 +227,7 @@ export type Database = {
           website_url?: string | null;
           checks?: Json;
           digital_gap_score?: number;
-          commercial_fit_score?: number;
+          preview_readiness_score?: number;
           score_breakdown?: Json;
           created_at?: string;
         };

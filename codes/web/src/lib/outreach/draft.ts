@@ -19,7 +19,7 @@ export type OutreachInput = {
   city: string | null;
   contactName: string | null;
   digitalGapScore: number;
-  commercialFitScore: number;
+  previewReadinessScore: number;
   previewUrl: string | null;
   gapHighlights: string[];
 };
@@ -28,6 +28,15 @@ export type OutreachDraft = {
   subject: string;
   body: string;
   whatsappMessage: string;
+};
+
+export type OutreachLanguage = "en" | "kn" | "bilingual";
+
+const LANGUAGE_INSTRUCTION: Record<OutreachLanguage, string> = {
+  en: "Write the entire outreach in clear, professional English.",
+  kn: "Write the entire outreach in natural, professional Kannada. Preserve the hospital name, doctor names, and phone numbers exactly.",
+  bilingual:
+    "Write each field bilingually: the English version first, then a blank line, then the Kannada translation. Preserve the hospital name, doctor names, and phone numbers exactly.",
 };
 
 // ---------------------------------------------------------------------------
@@ -44,7 +53,10 @@ const outreachSchema = z.object({
 // Prompt
 // ---------------------------------------------------------------------------
 
-function buildOutreachPrompt(input: OutreachInput): {
+function buildOutreachPrompt(
+  input: OutreachInput,
+  language: OutreachLanguage,
+): {
   systemPrompt: string;
   userPrompt: string;
 } {
@@ -57,7 +69,8 @@ RULES:
 4. Keep it concise — busy hospital owners don't read long messages.
 5. Do not make false claims or promises.
 6. Generate three things: email subject, email body, and a short WhatsApp message.
-7. Return as JSON with keys: subject, body, whatsappMessage.`;
+7. ${LANGUAGE_INSTRUCTION[language]}
+8. Return as JSON with keys: subject, body, whatsappMessage.`;
 
   const gaps = input.gapHighlights.length > 0
     ? `\nDigital gaps noticed: ${input.gapHighlights.join(", ")}`
@@ -72,7 +85,7 @@ Hospital: ${input.hospitalName}
 Location: ${input.city ?? "Tumakuru"}
 Contact: ${input.contactName ?? "Hospital Administrator"}
 Digital Gap Score: ${input.digitalGapScore}/100
-Commercial Fit Score: ${input.commercialFitScore}/100${gaps}${preview}
+Preview Readiness Score: ${input.previewReadinessScore}/100${gaps}${preview}
 
 Generate JSON with: subject, body, whatsappMessage`;
 
@@ -85,9 +98,13 @@ Generate JSON with: subject, body, whatsappMessage`;
 
 export async function generateOutreachDraft(input: {
   lead: OutreachInput;
+  language?: OutreachLanguage;
   config?: Partial<LlmConfig>;
 }): Promise<LlmResult<OutreachDraft>> {
-  const { systemPrompt, userPrompt } = buildOutreachPrompt(input.lead);
+  const { systemPrompt, userPrompt } = buildOutreachPrompt(
+    input.lead,
+    input.language ?? "en",
+  );
 
   return extractStructured({
     systemPrompt,

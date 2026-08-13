@@ -12,7 +12,8 @@ type Action =
   | "translate"
   | "approve-en"
   | "approve-kn"
-  | "deploy";
+  | "deploy"
+  | "screenshots";
 
 type PipelineActionButtonProps = {
   leadId: string;
@@ -37,6 +38,7 @@ const actionConfig: Record<
   "approve-en": { path: "content/approve", body: { stage: "EN" } },
   "approve-kn": { path: "content/approve", body: { stage: "KN" } },
   deploy: { path: "deploy" },
+  screenshots: { path: "screenshots" },
 };
 
 export function PipelineActionButton({

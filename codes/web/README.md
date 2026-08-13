@@ -34,9 +34,40 @@ Open the app at:
 http://localhost:3000/admin
 ```
 
+## Local development environment (start here)
+
+```bash
+# 1. Local Supabase (requires Docker Desktop running)
+npx supabase start          # prints API URL + service_role/anon keys
+npx supabase db reset       # applies every migration in supabase/migrations
+
+# 2. Env
+cp .env.local.example .env.local
+#    paste the Supabase URL + service_role key, set ADMIN_PASSWORD and
+#    ADMIN_SESSION_SECRET (openssl rand -hex 32). Add LLM_API_KEY for live AI.
+
+# 3. Run
+npm run dev                 # http://localhost:3000/admin  (sign in first)
+
+# 4. Optional: enable screenshot capture
+npm i -D playwright && npx playwright install chromium
+
+# 5. Verify everything deterministic (no Docker / no API key needed)
+npm test && npm run typecheck && npm run lint && npm run build && npm run eval
+```
+
+If Docker is unavailable, all tests/typecheck/lint/build/eval still pass — they
+are deterministic and do not require a database. A network-gated demo runs the
+real fetch + website audit against a permitted public source:
+
+```bash
+DEMO_URL="https://tumkur.nic.in/en/public-utility/district-hospital-tumakuru/" \
+  npx vitest run src/lib/research/live-audit.demo.test.ts
+```
+
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill it in.
+Copy `.env.local.example` to `.env.local` and fill it in.
 
 **Admin auth is required.** `/admin/*` and internal `/api/*` are locked behind a
 password sign-in at `/admin/login`. Set both:
@@ -50,6 +81,13 @@ If these are unset, the admin console and APIs stay locked. The public
 
 Fill the Supabase keys before doing a real database import. Dry-run CSV parsing
 works without Supabase.
+
+**LLM model & cost.** The provider is Google Gemini (REST v1beta). The default
+model is `gemini-3.6-flash` (`LLM_MODEL`), a stable Flash model supporting
+structured JSON output. Official paid-tier pricing ($1.50 input / $7.50 output
+per 1M tokens) lives in `src/lib/ai/pricing.ts`; INR estimates use an
+approximate `USD_TO_INR` rate. Changing `LLM_MODEL` should be paired with a
+pricing row for that model.
 
 ## Human approval gates
 

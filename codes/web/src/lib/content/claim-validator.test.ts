@@ -77,20 +77,34 @@ describe("validateClaims — fact-type semantic grounding (P0-3)", () => {
     expect(validateClaims(c, facts).valid).toBe(true);
   });
 
-  it("FAILS a doctor qualification with no QUALIFICATION fact", () => {
+  it("FAILS an invented doctor qualification grounded in no cited fact", () => {
     const c = baseContent();
     c.doctors = [{ name: "Dr. Meena Rao", qualification: "MD Cardiology", supporting_fact_ids: ["f_doc"] }];
     const r = validateClaims(c, facts);
     expect(r.valid).toBe(false);
-    expect(r.issues.some((i) => /QUALIFICATION/.test(i.message))).toBe(true);
+    expect(r.issues.some((i) => i.message.includes("MD Cardiology"))).toBe(true);
   });
 
-  it("PASSES a doctor qualification backed by a QUALIFICATION fact", () => {
+  it("PASSES a doctor qualification grounded in a cited QUALIFICATION fact", () => {
     const c = baseContent();
     c.doctors = [
       { name: "Dr. Meena Rao", qualification: "MBBS, MS", supporting_fact_ids: ["f_doc", "f_qual"] },
     ];
     expect(validateClaims(c, facts).valid).toBe(true);
+  });
+
+  it("PASSES a doctor whose specialty is embedded in the DOCTOR fact value", () => {
+    const embedded = {
+      id: "f_doc2",
+      fact_type: "DOCTOR",
+      value: { name: "Dr. Rao", specialty: "Psychiatrist" },
+      source_excerpt: "Dr. Rao Psychiatrist",
+    };
+    const c = baseContent();
+    c.doctors = [
+      { name: "Dr. Rao", specialty: "Psychiatrist", supporting_fact_ids: ["f_doc2"] },
+    ];
+    expect(validateClaims(c, [...facts, embedded]).valid).toBe(true);
   });
 
   it("PASSES a specialty matching a SPECIALTY fact", () => {

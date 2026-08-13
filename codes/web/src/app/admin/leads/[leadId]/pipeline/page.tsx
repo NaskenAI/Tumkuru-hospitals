@@ -4,6 +4,10 @@ import Link from "next/link";
 import { PipelineActionButton } from "@/components/leads/pipeline-action-button";
 import { OutreachPanel } from "@/components/leads/outreach-panel";
 import {
+  summarizeEvents,
+  type AnalyticsEventRow,
+} from "@/lib/analytics/summary";
+import {
   createSupabaseServiceClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/server";
@@ -27,6 +31,7 @@ async function getLeadPipelineData(leadId: string) {
     { data: content },
     { data: previews },
     { data: jobs },
+    { data: analytics },
   ] = await Promise.all([
     supabase
       .from("leads")
@@ -44,7 +49,7 @@ async function getLeadPipelineData(leadId: string) {
       .eq("lead_id", leadId),
     supabase
       .from("website_audits")
-      .select("id,digital_gap_score,commercial_fit_score,created_at")
+      .select("id,digital_gap_score,preview_readiness_score,created_at")
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false })
       .limit(1),
@@ -56,7 +61,9 @@ async function getLeadPipelineData(leadId: string) {
       .limit(1),
     supabase
       .from("previews")
-      .select("id,slug,status,deployed_at")
+      .select(
+        "id,slug,status,deployed_at,desktop_screenshot_path,mobile_screenshot_path",
+      )
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false })
       .limit(1),
@@ -66,9 +73,60 @@ async function getLeadPipelineData(leadId: string) {
       .eq("lead_id", leadId)
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("analytics_events")
+      .select("event,created_at")
+      .eq("lead_id", leadId),
   ]);
 
-  return { lead, sources, facts, audits, content, previews, jobs };
+  return { lead, sources, facts, audits, content, previews, jobs, analytics };
+}
+
+type BreakdownItem = {
+  label: string;
+  points: number;
+  maxPoints: number;
+  reason: string;
+};
+
+function BreakdownList({ title, items }: { title: string; items: BreakdownItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <h4 className="text-xs font-semibold text-slate-600">{title}</h4>
+      <ul className="mt-1 space-y-1">
+        {items.map((it, i) => (
+          <li key={i} className="flex justify-between gap-3 text-xs text-slate-600">
+            <span>{it.label}</span>
+            <span className="tabular-nums text-slate-400">
+              {it.points}/{it.maxPoints}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ScoreBreakdown({ breakdown }: { breakdown: unknown }) {
+  const b = (breakdown ?? {}) as {
+    digitalGap?: BreakdownItem[];
+    previewReadiness?: BreakdownItem[];
+  };
+  const gap = b.digitalGap ?? [];
+  const readiness = b.previewReadiness ?? [];
+  if (gap.length === 0 && readiness.length === 0) return null;
+  return (
+    <details className="mt-2 rounded-md border border-slate-100 bg-white p-3">
+      <summary className="cursor-pointer text-xs font-medium text-slate-600">
+        Score breakdown
+      </summary>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <BreakdownList title="Digital Gap" items={gap} />
+        <BreakdownList title="Preview Readiness" items={readiness} />
+      </div>
+    </details>
+  );
 }
 
 function StepCard({
@@ -122,7 +180,11 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
     );
   }
 
-  const { lead, sources, facts, audits, content, previews, jobs } = data;
+  const { lead, sources, facts, audits, content, previews, jobs, analytics } =
+    data;
+  const analyticsSummary = summarizeEvents(
+    (analytics ?? []) as AnalyticsEventRow[],
+  );
   const hasSources = (sources?.length ?? 0) > 0;
   const factCount = facts?.length ?? 0;
   const verifiedCount = facts?.filter((f) => f.verification_status === "VERIFIED").length ?? 0;
@@ -142,8 +204,17 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
     contentStatus === "KN_APPROVED" || contentStatus === "VALIDATED";
   const hasPreview = (previews?.length ?? 0) > 0;
   const previewSlug = previews?.[0]?.slug;
+  const desktopShot = previews?.[0]?.desktop_screenshot_path ?? null;
+  const mobileShot = previews?.[0]?.mobile_screenshot_path ?? null;
+  const hasShots = Boolean(desktopShot && mobileShot);
   const totalCost = (jobs ?? []).reduce((s, j) => s + Number(j.estimated_cost ?? 0), 0);
   const totalTokens = (jobs ?? []).reduce((s, j) => s + (j.tokens ?? 0), 0);
+  const gap = lead.digital_gap_score;
+  const readiness = lead.preview_readiness_score;
+  const priority =
+    gap !== null && readiness !== null
+      ? Math.round(gap * 0.4 + readiness * 0.6)
+      : null;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -167,20 +238,32 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
           </div>
         </header>
 
-        {/* Cost summary */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 text-center shadow-sm">
-            <span className="text-2xl font-bold text-slate-950">{lead.digital_gap_score ?? "—"}</span>
-            <span className="block text-xs text-slate-500 mt-1">Digital Gap</span>
+        {/* Scores (heuristic) */}
+        <div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 text-center shadow-sm">
+              <span className="text-2xl font-bold text-slate-950">{gap ?? "—"}</span>
+              <span className="mt-1 block text-xs text-slate-500">Digital Gap</span>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 text-center shadow-sm">
+              <span className="text-2xl font-bold text-slate-950">{readiness ?? "—"}</span>
+              <span className="mt-1 block text-xs text-slate-500">Preview Readiness</span>
+            </div>
+            <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-center shadow-sm">
+              <span className="text-2xl font-bold text-teal-900">{priority ?? "—"}</span>
+              <span className="mt-1 block text-xs text-teal-700">Priority</span>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 text-center shadow-sm">
+              <span className="text-2xl font-bold text-slate-950">₹{totalCost.toFixed(2)}</span>
+              <span className="mt-1 block text-xs text-slate-500">{totalTokens} tokens</span>
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 text-center shadow-sm">
-            <span className="text-2xl font-bold text-slate-950">{lead.commercial_fit_score ?? "—"}</span>
-            <span className="block text-xs text-slate-500 mt-1">Commercial Fit</span>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 text-center shadow-sm">
-            <span className="text-2xl font-bold text-slate-950">₹{totalCost.toFixed(2)}</span>
-            <span className="block text-xs text-slate-500 mt-1">{totalTokens} tokens</span>
-          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Scores are heuristic and subject to change after real sales
+            conversations. Priority = 40% Digital Gap + 60% Preview Readiness.
+            Not a predictive/commercial signal.
+          </p>
+          <ScoreBreakdown breakdown={lead.score_breakdown} />
         </div>
 
         {/* Pipeline steps */}
@@ -220,7 +303,7 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
           <StepCard
             title="4. Score Lead"
             status={lead.digital_gap_score !== null ? "done" : "pending"}
-            detail={lead.digital_gap_score !== null ? `Gap: ${lead.digital_gap_score}, Fit: ${lead.commercial_fit_score}` : "Not scored yet"}
+            detail={lead.digital_gap_score !== null ? `Gap: ${lead.digital_gap_score}, Fit: ${lead.preview_readiness_score}` : "Not scored yet"}
           >
             <PipelineActionButton leadId={leadId} action="score" label="Compute Scores" />
           </StepCard>
@@ -320,7 +403,92 @@ export default async function PipelinePage({ params }: PipelinePageProps) {
               )}
             </div>
           </StepCard>
+
+          <StepCard
+            title="10. Screenshots"
+            status={hasShots ? "done" : "pending"}
+            detail={
+              hasShots
+                ? "Desktop + mobile captured."
+                : hasPreview
+                  ? "Capture desktop (1440×900) + mobile (390×844)."
+                  : "Deploy a preview first."
+            }
+          >
+            <div className="flex flex-col gap-3">
+              <PipelineActionButton
+                leadId={leadId}
+                action="screenshots"
+                label="Capture screenshots"
+                disabled={!hasPreview}
+              />
+              {hasShots && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <a href={desktopShot!} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={desktopShot!}
+                      alt="Desktop preview screenshot"
+                      className="w-full rounded-md border border-slate-200"
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">Desktop</span>
+                  </a>
+                  <a href={mobileShot!} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={mobileShot!}
+                      alt="Mobile preview screenshot"
+                      className="w-full rounded-md border border-slate-200"
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">Mobile</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          </StepCard>
         </div>
+
+        {/* Preview analytics (coarse, privacy-preserving) */}
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-950">
+              Preview analytics
+            </h2>
+            <span
+              className={`rounded-md px-2 py-1 text-xs font-medium ${
+                analyticsSummary.label === "ENGAGED"
+                  ? "bg-teal-100 text-teal-800"
+                  : analyticsSummary.label === "VIEWED"
+                    ? "bg-blue-100 text-blue-800"
+                    : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {analyticsSummary.label}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: "Preview opens", value: analyticsSummary.opens },
+              { label: "Call clicks", value: analyticsSummary.callClicks },
+              { label: "WhatsApp clicks", value: analyticsSummary.whatsappClicks },
+              { label: "Directions clicks", value: analyticsSummary.directionsClicks },
+              { label: "Contact clicks", value: analyticsSummary.contactClicks },
+            ].map((m) => (
+              <div key={m.label} className="rounded-md bg-slate-50 p-2 text-center">
+                <div className="text-lg font-bold text-slate-950">{m.value}</div>
+                <div className="text-xs text-slate-500">{m.label}</div>
+              </div>
+            ))}
+            <div className="rounded-md bg-slate-50 p-2 text-center">
+              <div className="text-xs font-medium text-slate-700">
+                {analyticsSummary.lastOpened
+                  ? new Date(analyticsSummary.lastOpened).toLocaleString()
+                  : "—"}
+              </div>
+              <div className="text-xs text-slate-500">Last opened</div>
+            </div>
+          </div>
+        </section>
 
         {/* Outreach drafts (generated only; never sent automatically) */}
         <OutreachPanel leadId={leadId} />

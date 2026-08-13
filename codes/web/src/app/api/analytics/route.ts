@@ -21,7 +21,9 @@ const analyticsRequestSchema = z.object({
     "directions_clicked",
     "contact_clicked",
   ]),
-  deviceCategory: z.enum(["mobile", "desktop", "unknown"]).default("unknown"),
+  deviceCategory: z
+    .enum(["mobile", "desktop", "tablet_or_other"])
+    .default("tablet_or_other"),
 });
 
 export async function POST(request: NextRequest) {

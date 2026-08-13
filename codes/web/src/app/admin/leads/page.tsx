@@ -24,7 +24,7 @@ type LeadListRow = {
   status: string;
   duplicate_group: string | null;
   digital_gap_score: number | null;
-  commercial_fit_score: number | null;
+  preview_readiness_score: number | null;
   created_at: string;
 };
 
@@ -40,7 +40,7 @@ async function getLeads(): Promise<{
   const { data, error } = await supabase
     .from("leads")
     .select(
-      "id,hospital_name,city,known_website,seed_source_url,status,duplicate_group,digital_gap_score,commercial_fit_score,created_at",
+      "id,hospital_name,city,known_website,seed_source_url,status,duplicate_group,digital_gap_score,preview_readiness_score,created_at",
     )
     .order("created_at", { ascending: false })
     .limit(100);
@@ -223,7 +223,7 @@ export default async function LeadsPage() {
                         <td className="border-b border-slate-100 px-4 py-3">
                           <ScoreBadge
                             label="Fit"
-                            score={lead.commercial_fit_score}
+                            score={lead.preview_readiness_score}
                           />
                         </td>
                         <td className="border-b border-slate-100 px-4 py-3">
