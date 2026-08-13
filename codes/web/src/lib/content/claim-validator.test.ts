@@ -141,4 +141,21 @@ describe("validateClaims — fact-type semantic grounding (P0-3)", () => {
     const r = validateClaims(c, facts);
     expect(r.valid).toBe(false);
   });
+
+  it("a doctor AFFILIATION fact cannot ground a hospital accreditation claim", () => {
+    const affiliation = {
+      id: "f_aff",
+      fact_type: "AFFILIATION",
+      value: "member of the Indian Orthopaedic Association",
+      source_excerpt: "member of the Indian Orthopaedic Association",
+    };
+    const c = baseContent();
+    c.accreditations = [
+      { text: "member of the Indian Orthopaedic Association", supporting_fact_ids: ["f_aff"] },
+    ];
+    const r = validateClaims(c, [...facts, affiliation]);
+    // accreditations require an ACCREDITATION fact; AFFILIATION does not qualify.
+    expect(r.valid).toBe(false);
+    expect(r.issues.some((i) => /ACCREDITATION/.test(i.message))).toBe(true);
+  });
 });

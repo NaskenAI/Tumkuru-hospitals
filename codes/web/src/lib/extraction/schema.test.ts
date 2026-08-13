@@ -39,4 +39,20 @@ describe("extraction schema", () => {
     expect(riskTierForFactType("SERVICE")).toBe("MEDIUM");
     expect(riskTierForFactType("DOCTOR")).toBe("HIGH");
   });
+
+  it("separates a doctor AFFILIATION from a hospital ACCREDITATION", () => {
+    // AFFILIATION (doctor society membership) is its own high-risk type.
+    expect(riskTierForFactType("AFFILIATION")).toBe("HIGH");
+    // A membership can be parsed as AFFILIATION, distinct from ACCREDITATION.
+    const parsed = parseExtractionOutput({
+      facts: [
+        {
+          fact_type: "AFFILIATION",
+          value: "Member of the Indian Orthopaedic Association",
+          source_excerpt: "member of the Indian Orthopaedic Association",
+        },
+      ],
+    });
+    expect(parsed.facts[0].fact_type).toBe("AFFILIATION");
+  });
 });
